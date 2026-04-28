@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dhruvmishra/codedojo/internal/coach"
+	"github.com/dhruvmishra/codedojo/internal/coach/prompts"
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate"
 	"github.com/dhruvmishra/codedojo/internal/session"
 )
@@ -98,12 +99,17 @@ func gradeDiagnosis(ctx context.Context, submission Submission, log mutate.Mutat
 	if grader == nil {
 		return coach.Grade{}, nil
 	}
-	rubric := fmt.Sprintf("Grade diagnosis quality from 0 to 50. Mutation file=%s line=%d operator=%s description=%s. Do not include solution code in feedback.",
-		log.Mutation.FilePath,
-		log.Mutation.StartLine,
-		log.Mutation.Operator,
-		log.Mutation.Description,
-	)
+	rubric, err := prompts.Render("reviewer/grade_diagnosis.tmpl", map[string]any{
+		"MaxScore":     maxDiagnosis,
+		"MutationFile": log.Mutation.FilePath,
+		"MutationLine": log.Mutation.StartLine,
+		"Operator":     log.Mutation.Operator,
+		"Description":  log.Mutation.Description,
+		"Diagnosis":    submission.Diagnosis,
+	})
+	if err != nil {
+		return coach.Grade{}, fmt.Errorf("render reviewer diagnosis prompt: %w", err)
+	}
 	grade, err := grader.Grade(ctx, coach.GradeRequest{
 		SessionID: submission.SessionID,
 		Rubric:    rubric,
