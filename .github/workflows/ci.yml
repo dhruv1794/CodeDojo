@@ -23,3 +23,5 @@ jobs:
         run: make smoke
       - name: Reviewer e2e
         run: make e2e-reviewer
+      - name: Newcomer e2e
+        run: make e2e-newcomer
