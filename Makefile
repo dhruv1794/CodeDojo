@@ -1,6 +1,6 @@
 BIN := bin/codedojo
 
-.PHONY: build test lint smoke e2e-reviewer e2e clean
+.PHONY: build test lint smoke e2e-reviewer e2e-newcomer e2e clean
 
 build:
 	go build -ldflags "-X github.com/dhruvmishra/codedojo/internal/cli.version=dev -X github.com/dhruvmishra/codedojo/internal/cli.commit=$$(git rev-parse --short HEAD 2>/dev/null || echo none)" -o $(BIN) ./cmd/codedojo
@@ -17,7 +17,10 @@ smoke:
 e2e-reviewer:
 	go test ./internal/cli -run TestRunReviewScriptedSubmission -count=1
 
-e2e: smoke e2e-reviewer
+e2e-newcomer:
+	go test ./internal/cli -run TestRunLearnScriptedReimplementation -count=1
+
+e2e: smoke e2e-reviewer e2e-newcomer
 
 clean:
 	rm -rf bin dist coverage.out
