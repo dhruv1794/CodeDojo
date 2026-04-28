@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate"
 	"github.com/dhruvmishra/codedojo/internal/session"
 )
 
@@ -19,7 +20,7 @@ func TestOpenAppliesSchema(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t, ctx)
 
-	for _, table := range []string{"sessions", "events", "scores"} {
+	for _, table := range []string{"sessions", "events", "scores", "mutation_logs"} {
 		t.Run(table, func(t *testing.T) {
 			var name string
 			err := store.db.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
@@ -31,6 +32,72 @@ func TestOpenAppliesSchema(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMutationLogRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	if err := store.CreateSession(ctx, session.Session{
+		ID:         "sess-mutation",
+		Mode:       session.ModeReviewer,
+		Repo:       "/tmp/repo",
+		Task:       "find the mutation",
+		HintBudget: 3,
+		State:      session.StateRunning,
+		StartedAt:  time.Date(2026, 4, 28, 9, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	want := mutate.MutationLog{
+		ID:         "mutation-1",
+		RepoPath:   "/tmp/repo",
+		HeadSHA:    "abc123",
+		Difficulty: 3,
+		Mutation: mutate.Mutation{
+			Operator:    "boundary",
+			Difficulty:  2,
+			FilePath:    "calculator/calculator.go",
+			StartLine:   14,
+			StartColumn: 11,
+			EndLine:     14,
+			EndColumn:   12,
+			Original:    "value < min",
+			Mutated:     "value <= min",
+			Description: "flipped less-than boundary",
+			AppliedAt:   time.Date(2026, 4, 28, 9, 1, 0, 0, time.UTC),
+		},
+		CreatedAt: time.Date(2026, 4, 28, 9, 1, 0, 0, time.UTC),
+	}
+
+	if err := store.SaveMutationLog(ctx, "sess-mutation", want); err != nil {
+		t.Fatalf("SaveMutationLog() error = %v", err)
+	}
+	got, err := store.GetMutationLog(ctx, "mutation-1")
+	if err != nil {
+		t.Fatalf("GetMutationLog() error = %v", err)
+	}
+	assertMutationLogEqual(t, got, want)
+
+	logs, err := store.ListMutationLogs(ctx, "sess-mutation")
+	if err != nil {
+		t.Fatalf("ListMutationLogs() error = %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("ListMutationLogs() length = %d, want 1", len(logs))
+	}
+	assertMutationLogEqual(t, logs[0], want)
+
+	want.Mutation.EndLine = 15
+	if err := store.SaveMutationLog(ctx, "sess-mutation", want); err != nil {
+		t.Fatalf("SaveMutationLog() update error = %v", err)
+	}
+	got, err = store.GetMutationLog(ctx, "mutation-1")
+	if err != nil {
+		t.Fatalf("GetMutationLog() after update error = %v", err)
+	}
+	assertMutationLogEqual(t, got, want)
 }
 
 func TestStoreCRUDRoundTrip(t *testing.T) {
@@ -227,5 +294,24 @@ func assertSessionEqual(t *testing.T, got, want session.Session) {
 		got.State != want.State ||
 		!got.StartedAt.Equal(want.StartedAt) {
 		t.Fatalf("session = %+v, want %+v", got, want)
+	}
+}
+
+func assertMutationLogEqual(t *testing.T, got, want mutate.MutationLog) {
+	t.Helper()
+
+	if got.ID != want.ID ||
+		got.RepoPath != want.RepoPath ||
+		got.HeadSHA != want.HeadSHA ||
+		got.Difficulty != want.Difficulty ||
+		got.Mutation.Operator != want.Mutation.Operator ||
+		got.Mutation.FilePath != want.Mutation.FilePath ||
+		got.Mutation.StartLine != want.Mutation.StartLine ||
+		got.Mutation.EndLine != want.Mutation.EndLine ||
+		got.Mutation.Original != want.Mutation.Original ||
+		got.Mutation.Mutated != want.Mutation.Mutated ||
+		!got.CreatedAt.Equal(want.CreatedAt) ||
+		!got.Mutation.AppliedAt.Equal(want.Mutation.AppliedAt) {
+		t.Fatalf("mutation log = %+v, want %+v", got, want)
 	}
 }
