@@ -43,11 +43,18 @@ func TestRenderMissingVariableReturnsClearError(t *testing.T) {
 func TestEmbeddedReviewerPromptsMatchConfigPrompts(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range []string{"system.tmpl", "grade_diagnosis.tmpl"} {
-		configPrompt := readRepoFile(t, "configs", "prompts", "reviewer", name)
-		embeddedPrompt := readRepoFile(t, "internal", "coach", "prompts", "templates", "reviewer", name)
+	for _, prompt := range []struct {
+		dir  string
+		name string
+	}{
+		{dir: "reviewer", name: "system.tmpl"},
+		{dir: "reviewer", name: "grade_diagnosis.tmpl"},
+		{dir: "newcomer", name: "summarize.tmpl"},
+	} {
+		configPrompt := readRepoFile(t, "configs", "prompts", prompt.dir, prompt.name)
+		embeddedPrompt := readRepoFile(t, "internal", "coach", "prompts", "templates", prompt.dir, prompt.name)
 		if configPrompt != embeddedPrompt {
-			t.Fatalf("%s differs between configs/prompts and embedded prompt copy", name)
+			t.Fatalf("%s/%s differs between configs/prompts and embedded prompt copy", prompt.dir, prompt.name)
 		}
 	}
 }
