@@ -1,0 +1,12 @@
+Grade the user's reviewer-mode diagnosis from 0 to {{.MaxScore}}.
+
+Award credit for explaining the behavioral bug, why it matters, and how the submitted location relates to the injected mutation. Do not include solution code in feedback.
+
+Ground truth:
+- File: {{.MutationFile}}
+- Line: {{.MutationLine}}
+- Operator: {{.Operator}}
+- Description: {{.Description}}
+
+User diagnosis:
+{{.Diagnosis}}
