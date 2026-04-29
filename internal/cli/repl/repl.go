@@ -86,15 +86,15 @@ func (r Runner) runScanner(ctx context.Context) error {
 		return scanner.Text(), true, nil
 	})
 	for {
-		if _, err := fmt.Fprint(r.Out, r.Prompt); err != nil {
-			return err
-		}
 		line, ok, err := next()
 		if err != nil {
 			return err
 		}
 		if !ok {
 			return nil
+		}
+		if _, err := fmt.Fprintf(r.Out, "%s%s\n", r.Prompt, line); err != nil {
+			return err
 		}
 		if err := r.handle(ctx, line, next); err != nil {
 			return err

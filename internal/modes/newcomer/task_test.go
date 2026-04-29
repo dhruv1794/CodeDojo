@@ -62,6 +62,20 @@ func TestGenerateTaskRejectsLeakySummary(t *testing.T) {
 	}
 }
 
+func TestPromptSummarizerFallsBackWhenIdentifierStrippingDestroysSummary(t *testing.T) {
+	summary, err := (PromptSummarizer{}).Summarize(context.Background(), SummaryRequest{
+		CommitMessage:     "fix: update graph view renderer",
+		ReferenceDiff:     "+placeholder",
+		BannedIdentifiers: []string{"update", "graph", "view", "renderer"},
+	})
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
+	if summary != "Add the user-visible behavior covered by the original tests." {
+		t.Fatalf("Summarize() = %q, want fallback", summary)
+	}
+}
+
 func TestIntroducedIdentifiersOnlyUsesAddedLines(t *testing.T) {
 	diff := `diff --git a/calc.go b/calc.go
 --- a/calc.go
@@ -78,6 +92,26 @@ func TestIntroducedIdentifiersOnlyUsesAddedLines(t *testing.T) {
 	}
 	if contains(got, "Add") {
 		t.Fatalf("IntroducedIdentifiers() = %#v, should not include deleted identifiers", got)
+	}
+}
+
+func TestIntroducedIdentifiersIgnoresCommonWords(t *testing.T) {
+	diff := `diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1 +1,2 @@
++This should be visible when the graph has data.
++def build_graph():
++    return Graph()
+`
+	got := IntroducedIdentifiers(diff)
+	for _, ignored := range []string{"be", "This", "when", "the", "has"} {
+		if contains(got, ignored) {
+			t.Fatalf("IntroducedIdentifiers() = %#v, should ignore common word %q", got, ignored)
+		}
+	}
+	if !contains(got, "build_graph") || !contains(got, "Graph") {
+		t.Fatalf("IntroducedIdentifiers() = %#v, want real identifiers", got)
 	}
 }
 

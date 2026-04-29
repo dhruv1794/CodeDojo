@@ -40,11 +40,12 @@ func runStatus(ctx context.Context, cmd *cobra.Command, limit int) error {
 		return err
 	}
 	out := cmd.OutOrStdout()
+	ui := themeFor(cmd)
 	if len(sessions) == 0 || limit == 0 {
-		_, err := fmt.Fprintln(out, "No sessions yet.")
+		_, err := fmt.Fprintln(out, ui.Muted("No sessions yet."))
 		return err
 	}
-	if _, err := fmt.Fprintln(out, "STARTED              MODE      SCORE  STATE   HINTS  REPO"); err != nil {
+	if _, err := fmt.Fprintf(out, "%s\nSTARTED              MODE      SCORE  STATE   HINTS  REPO\n", ui.Banner("Session history")); err != nil {
 		return err
 	}
 	for i, sess := range sessions {

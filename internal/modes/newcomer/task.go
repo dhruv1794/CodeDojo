@@ -110,7 +110,7 @@ func (PromptSummarizer) Summarize(ctx context.Context, req SummaryRequest) (stri
 	summary := summarizeCommitMessage(req.CommitMessage)
 	summary = removeBannedIdentifiers(summary, req.BannedIdentifiers)
 	summary = strings.TrimSpace(summary)
-	if summary == "" {
+	if summary == "" || strings.Count(summary, "the feature") > 2 {
 		summary = "Add the user-visible behavior covered by the original tests."
 	}
 	return summary, nil
@@ -123,7 +123,7 @@ func IntroducedIdentifiers(diff string) []string {
 			continue
 		}
 		for _, ident := range identifierPattern.FindAllString(line[1:], -1) {
-			if goKeywords[ident] || len(ident) < 2 {
+			if shouldIgnoreIdentifier(ident) {
 				continue
 			}
 			seen[ident] = true
@@ -135,6 +135,16 @@ func IntroducedIdentifiers(diff string) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+func shouldIgnoreIdentifier(ident string) bool {
+	if len(ident) < 3 {
+		return true
+	}
+	if goKeywords[ident] {
+		return true
+	}
+	return commonWords[strings.ToLower(ident)]
 }
 
 func selectCandidate(ranked []history.CommitCandidate, difficulty int) history.CommitCandidate {
@@ -198,4 +208,11 @@ var goKeywords = map[string]bool{
 	"chan": true, "else": true, "goto": true, "package": true, "switch": true,
 	"const": true, "fallthrough": true, "if": true, "range": true, "type": true,
 	"continue": true, "for": true, "import": true, "return": true, "var": true,
+}
+
+var commonWords = map[string]bool{
+	"and": true, "are": true, "but": true, "can": true, "for": true, "from": true,
+	"has": true, "have": true, "into": true, "not": true, "the": true, "this": true,
+	"that": true, "then": true, "there": true, "these": true, "those": true, "with": true,
+	"when": true, "where": true, "will": true, "your": true,
 }

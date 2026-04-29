@@ -51,5 +51,6 @@ func warnLocalFallback(out io.Writer, err error) {
 	if out == nil {
 		return
 	}
-	_, _ = fmt.Fprintf(out, "WARN docker sandbox unavailable; falling back to local sandbox: %v\n", err)
+	ui := themeForWriter(out)
+	_, _ = fmt.Fprintf(out, "%s docker sandbox unavailable; falling back to local sandbox: %v\n", ui.Warning("WARN"), err)
 }
