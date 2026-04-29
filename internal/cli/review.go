@@ -18,7 +18,6 @@ import (
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate/op"
 	"github.com/dhruvmishra/codedojo/internal/repo"
 	"github.com/dhruvmishra/codedojo/internal/sandbox"
-	"github.com/dhruvmishra/codedojo/internal/sandbox/local"
 	"github.com/dhruvmishra/codedojo/internal/session"
 	"github.com/dhruvmishra/codedojo/internal/store/sqlite"
 	"github.com/spf13/cobra"
@@ -115,10 +114,11 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 	if err != nil {
 		return err
 	}
+	selected := selectSandbox(ctx, cmd.ErrOrStderr())
 	manager := session.Manager{
 		Coach:  hintCoach,
 		Store:  store,
-		Driver: local.Driver{},
+		Driver: selected.driver,
 	}
 	sess := session.Session{
 		ID:         sessionID,
@@ -128,12 +128,16 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 		HintBudget: opts.Budget,
 		StartedAt:  time.Now(),
 	}
-	box, err := manager.New(ctx, sess, sandbox.Spec{RepoMount: task.RepoPath, Network: sandbox.NetworkNone})
+	box, err := manager.New(ctx, sess, selected.spec(task.RepoPath))
 	if err != nil {
 		return err
 	}
 	defer box.Close()
 	if err := store.SaveMutationLog(ctx, sessionID, task.MutationLog); err != nil {
+		return err
+	}
+	streak, err := store.GetStreak(ctx)
+	if err != nil {
 		return err
 	}
 
@@ -147,9 +151,10 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 		sessionID:  sessionID,
 		startedAt:  sess.StartedAt,
 		hintLimit:  opts.Budget,
+		streak:     streak.Current,
 		gradeCoach: gradeCoach,
 	}
-	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Reviewer task ready. Difficulty %d. Type help for commands.\n", opts.Difficulty); err != nil {
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Reviewer task ready. Difficulty %d. Streak %d. Type help for commands.\n", opts.Difficulty, streak.Current); err != nil {
 		return err
 	}
 	return repl.Runner{
@@ -172,6 +177,7 @@ type reviewREPL struct {
 	hintLimit  int
 	hintCosts  []int
 	hintsUsed  int
+	streak     int
 	done       bool
 	gradeCoach coach.Coach
 }
@@ -309,6 +315,7 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 		HintCosts:     r.hintCosts,
 		StartedAt:     r.startedAt,
 		SubmittedAt:   time.Now(),
+		Streak:        r.streak,
 	}, r.task.MutationLog, reviewer.GradeOptions{Coach: r.gradeCoach})
 	if err != nil {
 		return err
@@ -322,11 +329,15 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 	if err := r.store.AppendEvent(ctx, session.Event{SessionID: r.sessionID, Type: session.EventGrade, Payload: fmt.Sprintf("score=%d", result.Score)}); err != nil {
 		return err
 	}
+	streak, err := r.store.RecordStreakResult(ctx, result.Score > 0)
+	if err != nil {
+		return err
+	}
 	if err := r.manager.Close(ctx, r.sessionID, r.box); err != nil {
 		return err
 	}
 	r.done = true
-	if _, err := fmt.Fprintf(r.cmd.OutOrStdout(), "score: %d\nfile: %d line: %d operator: %d diagnosis: %d hints: -%d time: %d\n%s\n",
+	if _, err := fmt.Fprintf(r.cmd.OutOrStdout(), "score: %d\nfile: %d line: %d operator: %d diagnosis: %d hints: -%d time: %d streak: %d\n%s\n",
 		result.Score,
 		result.FileScore,
 		result.LineScore,
@@ -334,6 +345,7 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 		result.DiagnosisScore,
 		result.HintDeduction,
 		result.TimeBonus,
+		streak.Current,
 		result.DiagnosisFeedback,
 	); err != nil {
 		return err

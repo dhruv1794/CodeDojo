@@ -13,6 +13,7 @@ type Store interface {
 	CreateSession(ctx context.Context, sess Session) error
 	GetSession(ctx context.Context, id string) (Session, error)
 	AppendEvent(ctx context.Context, event Event) error
+	IncrementHintsUsed(ctx context.Context, id string) error
 	UpdateState(ctx context.Context, id string, state State) error
 }
 
@@ -57,6 +58,9 @@ func (m Manager) RequestHint(ctx context.Context, sessionID string, level coach.
 		return coach.Hint{}, err
 	}
 	if err := m.Store.AppendEvent(ctx, Event{SessionID: sessionID, Type: EventHint, Payload: hint.Content}); err != nil {
+		return coach.Hint{}, err
+	}
+	if err := m.Store.IncrementHintsUsed(ctx, sessionID); err != nil {
 		return coach.Hint{}, err
 	}
 	return hint, nil
