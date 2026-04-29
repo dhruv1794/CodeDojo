@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -134,13 +135,20 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 		streak:     streak.Current,
 		gradeCoach: gradeCoach,
 	}
-	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Newcomer task ready. Difficulty %d. Streak %d.\nFeature: %s\nType help for commands.\n", opts.Difficulty, streak.Current, task.FeatureDescription); err != nil {
+	ui := themeFor(cmd)
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\nNewcomer task ready. Difficulty %d. Streak %d.\n%s %s\nType help for commands.\n",
+		ui.Banner("Newcomer mode"),
+		opts.Difficulty,
+		streak.Current,
+		ui.Label("Feature"),
+		task.FeatureDescription,
+	); err != nil {
 		return err
 	}
 	return repl.Runner{
 		In:        cmd.InOrStdin(),
 		Out:       cmd.OutOrStdout(),
-		Prompt:    "codedojo(learn)> ",
+		Prompt:    ui.Prompt("learn"),
 		Multiline: state.handle,
 	}.Run(ctx)
 }
@@ -194,16 +202,17 @@ func (l *learnREPL) handle(ctx context.Context, line string, next repl.LineSourc
 }
 
 func (l *learnREPL) help() error {
-	_, err := fmt.Fprint(l.cmd.OutOrStdout(), `commands:
-  help
-  tests
-  cat <file>
-  diff
-  write <file>           (then enter content; finish with EOF on its own line)
-  hint [nudge|question|pointer|concept]
-  submit
-  quit
-`)
+	ui := themeFor(l.cmd)
+	_, err := fmt.Fprint(l.cmd.OutOrStdout(), ui.CommandList(
+		"help",
+		"tests",
+		"cat <file>",
+		"diff",
+		"write <file>           (then enter content; finish with EOF on its own line)",
+		"hint [nudge|question|pointer|concept]",
+		"submit",
+		"quit",
+	))
 	return err
 }
 
@@ -223,7 +232,12 @@ func (l *learnREPL) tests(ctx context.Context) error {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(out, "exit code: %d\n", result.ExitCode); err != nil {
+	ui := themeFor(l.cmd)
+	label := ui.Success("tests passed")
+	if result.ExitCode != 0 {
+		label = ui.Warning("tests failed")
+	}
+	if _, err := fmt.Fprintf(out, "%s\nexit code: %d\n", label, result.ExitCode); err != nil {
 		return err
 	}
 	return nil
@@ -237,7 +251,8 @@ func (l *learnREPL) cat(path string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprint(l.cmd.OutOrStdout(), string(data))
+	ui := themeFor(l.cmd)
+	_, err = fmt.Fprint(l.cmd.OutOrStdout(), ui.Box(path, string(data)))
 	return err
 }
 
@@ -249,7 +264,8 @@ func (l *learnREPL) diff() error {
 	if diff == "" {
 		diff = "(no local edits)\n"
 	}
-	_, err = fmt.Fprint(l.cmd.OutOrStdout(), diff)
+	ui := themeFor(l.cmd)
+	_, err = fmt.Fprint(l.cmd.OutOrStdout(), ui.Box("diff", diff))
 	return err
 }
 
@@ -278,13 +294,15 @@ func (l *learnREPL) write(path string, next repl.LineSource) error {
 	if err := l.box.WriteFile(path, []byte(content)); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(l.cmd.OutOrStdout(), "wrote %d lines to %s\n", len(lines), path)
+	ui := themeFor(l.cmd)
+	_, err := fmt.Fprintf(l.cmd.OutOrStdout(), "%s wrote %d lines to %s\n", ui.Success("ok"), len(lines), path)
 	return err
 }
 
 func (l *learnREPL) hint(ctx context.Context, name string) error {
 	if l.hintsUsed >= l.hintLimit {
-		_, err := fmt.Fprintln(l.cmd.OutOrStdout(), "hint budget exhausted")
+		ui := themeFor(l.cmd)
+		_, err := fmt.Fprintln(l.cmd.OutOrStdout(), ui.Warning("hint budget exhausted"))
 		return err
 	}
 	level, err := parseHintLevel(name)
@@ -297,7 +315,8 @@ func (l *learnREPL) hint(ctx context.Context, name string) error {
 	}
 	l.hintsUsed++
 	l.hintCosts = append(l.hintCosts, hint.Cost)
-	_, err = fmt.Fprintf(l.cmd.OutOrStdout(), "%s\n", hint.Content)
+	ui := themeFor(l.cmd)
+	_, err = fmt.Fprintf(l.cmd.OutOrStdout(), "%s %s\n", ui.Label("hint"), ui.Hint(hint.Content))
 	return err
 }
 
@@ -343,8 +362,10 @@ func (l *learnREPL) submit(ctx context.Context) error {
 	}
 	l.done = true
 	out := l.cmd.OutOrStdout()
-	if _, err := fmt.Fprintf(out, "score: %d\ncorrectness: %d approach: %d tests: %d hints: -%d streak: %d\n%s\n",
-		result.Score,
+	ui := themeFor(l.cmd)
+	if _, err := fmt.Fprintf(out, "%s\nscore: %s\ncorrectness: %d approach: %d tests: %d hints: -%d streak: %d\n%s\n",
+		ui.Banner("Result"),
+		ui.Score(strconv.Itoa(result.Score)),
 		result.CorrectnessScore,
 		result.ApproachScore,
 		result.TestQualityScore,

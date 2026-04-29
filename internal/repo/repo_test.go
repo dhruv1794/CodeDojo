@@ -70,15 +70,40 @@ func TestDetectLanguage(t *testing.T) {
 			want: Language{Name: "javascript", TestCmd: []string{"npm", "test"}, BuildCmd: []string{"npm", "run", "build"}},
 		},
 		{
+			name: "typescript tsconfig",
+			file: "tsconfig.json",
+			want: Language{Name: "typescript", TestCmd: []string{"npm", "test"}, BuildCmd: []string{"npm", "run", "build"}},
+		},
+		{
 			name: "python",
 			file: "pyproject.toml",
 			want: Language{Name: "python", TestCmd: []string{"python", "-m", "pytest"}, BuildCmd: []string{"python", "-m", "compileall", "."}},
+		},
+		{
+			name: "python requirements",
+			file: "requirements.txt",
+			want: Language{Name: "python", TestCmd: []string{"python", "-m", "pytest"}, BuildCmd: []string{"python", "-m", "compileall", "."}},
+		},
+		{
+			name: "python setup",
+			file: "setup.py",
+			want: Language{Name: "python", TestCmd: []string{"python", "-m", "pytest"}, BuildCmd: []string{"python", "-m", "compileall", "."}},
+		},
+		{
+			name: "rust",
+			file: "Cargo.toml",
+			want: Language{Name: "rust", TestCmd: []string{"cargo", "test"}, BuildCmd: []string{"cargo", "build"}},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()
+			if test.file == "tsconfig.json" {
+				if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"scripts":{"test":"echo test","build":"echo build"}}`), 0o644); err != nil {
+					t.Fatalf("write package fixture: %v", err)
+				}
+			}
 			if err := os.WriteFile(filepath.Join(dir, test.file), []byte("fixture"), 0o644); err != nil {
 				t.Fatalf("write fixture: %v", err)
 			}
@@ -90,6 +115,23 @@ func TestDetectLanguage(t *testing.T) {
 				t.Fatalf("DetectLanguage() = %#v, want %#v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestDetectLanguageTypeScriptPackageDependency(t *testing.T) {
+	dir := t.TempDir()
+	data := []byte(`{"devDependencies":{"typescript":"^5.0.0"}}`)
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), data, 0o644); err != nil {
+		t.Fatalf("write package fixture: %v", err)
+	}
+
+	got, err := DetectLanguage(dir)
+	if err != nil {
+		t.Fatalf("DetectLanguage() error = %v", err)
+	}
+	want := Language{Name: "typescript", TestCmd: []string{"npm", "test"}, BuildCmd: []string{"npm", "run", "build"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("DetectLanguage() = %#v, want %#v", got, want)
 	}
 }
 

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CodeDojo</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app">
+      <section class="setup" id="setup">
+        <div>
+          <p class="eyebrow">CodeDojo local</p>
+          <h1>Practice on a real repository</h1>
+        </div>
+        <form id="start-form" class="panel">
+          <label>
+            Repository
+            <input id="repo" name="repo" placeholder="/path/to/repo or git URL" required>
+          </label>
+          <div class="row">
+            <label>
+              Mode
+              <select id="mode" name="mode">
+                <option value="learn">Learn</option>
+                <option value="review">Review</option>
+              </select>
+            </label>
+            <label>
+              Difficulty
+              <input id="difficulty" name="difficulty" type="number" min="1" max="5" value="3">
+            </label>
+            <label>
+              Hints
+              <input id="hint-budget" name="hint-budget" type="number" min="0" max="10" value="3">
+            </label>
+          </div>
+          <button type="submit">Start session</button>
+        </form>
+      </section>
+
+      <section class="workspace hidden" id="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="mode-label">Session</p>
+            <h2 id="task-title">Task</h2>
+          </div>
+          <div class="stats">
+            <span id="difficulty-label">D3</span>
+            <span id="streak-label">Streak 0</span>
+            <span id="hint-label">Hints 0/0</span>
+          </div>
+        </header>
+
+        <div class="grid">
+          <aside class="panel files">
+            <div class="panel-head">
+              <strong>Files</strong>
+              <button id="refresh-files" type="button">Refresh</button>
+            </div>
+            <div id="file-list" class="file-list"></div>
+          </aside>
+
+          <section class="panel editor">
+            <div class="panel-head">
+              <strong id="active-file">No file selected</strong>
+              <button id="save-file" type="button" disabled>Save</button>
+            </div>
+            <div class="editor-body">
+              <div id="line-numbers" class="line-numbers" aria-hidden="true"></div>
+              <textarea id="file-content" spellcheck="false" disabled></textarea>
+            </div>
+          </section>
+
+          <aside class="panel tools">
+            <div class="actions">
+              <button id="run-tests" type="button">Run tests</button>
+              <button id="show-diff" type="button">Diff</button>
+              <select id="hint-level">
+                <option value="nudge">Nudge</option>
+                <option value="question">Question</option>
+                <option value="pointer">Pointer</option>
+                <option value="concept">Concept</option>
+              </select>
+              <button id="ask-hint" type="button">Hint</button>
+            </div>
+
+            <section>
+              <h3>Output</h3>
+              <pre id="output"></pre>
+            </section>
+
+            <section id="review-submit" class="submit hidden">
+              <h3>Review submission</h3>
+              <input id="review-file" placeholder="file path">
+              <div class="row">
+                <input id="review-start" type="number" min="1" placeholder="start">
+                <input id="review-end" type="number" min="1" placeholder="end">
+              </div>
+              <input id="review-operator" placeholder="operator class">
+              <textarea id="review-diagnosis" placeholder="diagnosis"></textarea>
+            </section>
+
+            <button id="submit" type="button" class="primary">Submit</button>
+          </aside>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,13 +40,46 @@ func DetectLanguage(path string) (Language, error) {
 	if _, ok := names["go.mod"]; ok {
 		return Language{Name: "go", TestCmd: []string{"go", "test", "./..."}, BuildCmd: []string{"go", "build", "./..."}}, nil
 	}
+	if _, ok := names["Cargo.toml"]; ok {
+		return Language{Name: "rust", TestCmd: []string{"cargo", "test"}, BuildCmd: []string{"cargo", "build"}}, nil
+	}
 	if _, ok := names["package.json"]; ok {
-		return Language{Name: "javascript", TestCmd: []string{"npm", "test"}, BuildCmd: []string{"npm", "run", "build"}}, nil
+		name := "javascript"
+		if hasTypeScriptProject(path, names) {
+			name = "typescript"
+		}
+		return Language{Name: name, TestCmd: []string{"npm", "test"}, BuildCmd: []string{"npm", "run", "build"}}, nil
 	}
 	if _, ok := names["pyproject.toml"]; ok {
 		return Language{Name: "python", TestCmd: []string{"python", "-m", "pytest"}, BuildCmd: []string{"python", "-m", "compileall", "."}}, nil
 	}
+	if _, ok := names["requirements.txt"]; ok {
+		return Language{Name: "python", TestCmd: []string{"python", "-m", "pytest"}, BuildCmd: []string{"python", "-m", "compileall", "."}}, nil
+	}
+	if _, ok := names["setup.py"]; ok {
+		return Language{Name: "python", TestCmd: []string{"python", "-m", "pytest"}, BuildCmd: []string{"python", "-m", "compileall", "."}}, nil
+	}
 	return Language{Name: "unknown"}, nil
+}
+
+func hasTypeScriptProject(path string, names map[string]struct{}) bool {
+	if _, ok := names["tsconfig.json"]; ok {
+		return true
+	}
+	data, err := os.ReadFile(filepath.Join(path, "package.json"))
+	if err != nil {
+		return false
+	}
+	var pkg struct {
+		Dependencies    map[string]any `json:"dependencies"`
+		DevDependencies map[string]any `json:"devDependencies"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return false
+	}
+	_, dep := pkg.Dependencies["typescript"]
+	_, devDep := pkg.DevDependencies["typescript"]
+	return dep || devDep
 }
 
 func detectOverride(path string) (Language, bool, error) {

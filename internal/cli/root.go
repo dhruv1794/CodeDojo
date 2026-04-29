@@ -34,6 +34,6 @@ func newRootCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
 	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose logging")
 	cmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable color output")
-	cmd.AddCommand(newInitCommand(), newReviewCommand(), newLearnCommand(), newStatusCommand(), newStatsCommand(), newVersionCommand(), newSmokeCommand())
+	cmd.AddCommand(newInitCommand(), newReviewCommand(), newLearnCommand(), newServeCommand(), newStatusCommand(), newStatsCommand(), newVersionCommand(), newSmokeCommand())
 	return cmd
 }

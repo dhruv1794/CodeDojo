@@ -154,13 +154,18 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 		streak:     streak.Current,
 		gradeCoach: gradeCoach,
 	}
-	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Reviewer task ready. Difficulty %d. Streak %d. Type help for commands.\n", opts.Difficulty, streak.Current); err != nil {
+	ui := themeFor(cmd)
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\nReviewer task ready. Difficulty %d. Streak %d. Type help for commands.\n",
+		ui.Banner("Reviewer mode"),
+		opts.Difficulty,
+		streak.Current,
+	); err != nil {
 		return err
 	}
 	return repl.Runner{
 		In:      cmd.InOrStdin(),
 		Out:     cmd.OutOrStdout(),
-		Prompt:  "codedojo(review)> ",
+		Prompt:  ui.Prompt("review"),
 		Handler: state.handle,
 	}.Run(ctx)
 }
@@ -212,15 +217,16 @@ func (r *reviewREPL) handle(ctx context.Context, line string) error {
 }
 
 func (r *reviewREPL) help() error {
-	_, err := fmt.Fprint(r.cmd.OutOrStdout(), `commands:
-  help
-  tests
-  cat <file>
-  diff
-  hint [nudge|question|pointer|concept]
-  submit <file>:<lineRange> <diagnosis>
-  quit
-`)
+	ui := themeFor(r.cmd)
+	_, err := fmt.Fprint(r.cmd.OutOrStdout(), ui.CommandList(
+		"help",
+		"tests",
+		"cat <file>",
+		"diff",
+		"hint [nudge|question|pointer|concept]",
+		"submit <file>:<lineRange> <diagnosis>",
+		"quit",
+	))
 	return err
 }
 
@@ -240,7 +246,12 @@ func (r *reviewREPL) tests(ctx context.Context) error {
 			return err
 		}
 	}
-	if _, err := fmt.Fprintf(out, "exit code: %d\n", result.ExitCode); err != nil {
+	ui := themeFor(r.cmd)
+	label := ui.Success("tests passed")
+	if result.ExitCode != 0 {
+		label = ui.Warning("tests failed")
+	}
+	if _, err := fmt.Fprintf(out, "%s\nexit code: %d\n", label, result.ExitCode); err != nil {
 		return err
 	}
 	return nil
@@ -254,7 +265,8 @@ func (r *reviewREPL) cat(path string) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprint(r.cmd.OutOrStdout(), string(data))
+	ui := themeFor(r.cmd)
+	_, err = fmt.Fprint(r.cmd.OutOrStdout(), ui.Box(path, string(data)))
 	return err
 }
 
@@ -266,13 +278,15 @@ func (r *reviewREPL) diff() error {
 	if diff == "" {
 		diff = "(no local edits)\n"
 	}
-	_, err = fmt.Fprint(r.cmd.OutOrStdout(), diff)
+	ui := themeFor(r.cmd)
+	_, err = fmt.Fprint(r.cmd.OutOrStdout(), ui.Box("diff", diff))
 	return err
 }
 
 func (r *reviewREPL) hint(ctx context.Context, name string) error {
 	if r.hintsUsed >= r.hintLimit {
-		_, err := fmt.Fprintln(r.cmd.OutOrStdout(), "hint budget exhausted")
+		ui := themeFor(r.cmd)
+		_, err := fmt.Fprintln(r.cmd.OutOrStdout(), ui.Warning("hint budget exhausted"))
 		return err
 	}
 	level, err := parseHintLevel(name)
@@ -285,7 +299,8 @@ func (r *reviewREPL) hint(ctx context.Context, name string) error {
 	}
 	r.hintsUsed++
 	r.hintCosts = append(r.hintCosts, hint.Cost)
-	_, err = fmt.Fprintf(r.cmd.OutOrStdout(), "%s\n", hint.Content)
+	ui := themeFor(r.cmd)
+	_, err = fmt.Fprintf(r.cmd.OutOrStdout(), "%s %s\n", ui.Label("hint"), ui.Hint(hint.Content))
 	return err
 }
 
@@ -337,8 +352,10 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 		return err
 	}
 	r.done = true
-	if _, err := fmt.Fprintf(r.cmd.OutOrStdout(), "score: %d\nfile: %d line: %d operator: %d diagnosis: %d hints: -%d time: %d streak: %d\n%s\n",
-		result.Score,
+	ui := themeFor(r.cmd)
+	if _, err := fmt.Fprintf(r.cmd.OutOrStdout(), "%s\nscore: %s\nfile: %d line: %d operator: %d diagnosis: %d hints: -%d time: %d streak: %d\n%s\n",
+		ui.Banner("Result"),
+		ui.Score(strconv.Itoa(result.Score)),
 		result.FileScore,
 		result.LineScore,
 		result.OperatorScore,
