@@ -3,6 +3,7 @@ package newcomer
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -20,6 +21,7 @@ type Task struct {
 	RepoPath           string
 	Difficulty         int
 	FeatureDescription string
+	SuggestedFiles     []SuggestedFile
 	GroundTruthSHA     string
 	StartingSHA        string
 	ReferenceDiff      string
@@ -31,7 +33,14 @@ type Task struct {
 type SummaryRequest struct {
 	CommitMessage     string
 	ReferenceDiff     string
+	ChangedFiles      []history.ChangedFile
 	BannedIdentifiers []string
+}
+
+type SuggestedFile struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+	Test   bool   `json:"test,omitempty"`
 }
 
 type Summarizer interface {
@@ -75,6 +84,7 @@ func (g TaskGenerator) GenerateTask(ctx context.Context, r repo.Repo, difficulty
 	description, err := summarizer.Summarize(ctx, SummaryRequest{
 		CommitMessage:     state.CommitMessage,
 		ReferenceDiff:     state.ReferenceDiff,
+		ChangedFiles:      candidate.Files,
 		BannedIdentifiers: banned,
 	})
 	if err != nil {
@@ -87,6 +97,7 @@ func (g TaskGenerator) GenerateTask(ctx context.Context, r repo.Repo, difficulty
 		RepoPath:           r.Path,
 		Difficulty:         difficulty,
 		FeatureDescription: description,
+		SuggestedFiles:     SuggestedFiles(candidate.Files),
 		GroundTruthSHA:     state.GroundTruthSHA,
 		StartingSHA:        state.StartingSHA,
 		ReferenceDiff:      state.ReferenceDiff,
@@ -107,13 +118,41 @@ func (PromptSummarizer) Summarize(ctx context.Context, req SummaryRequest) (stri
 	}); err != nil {
 		return "", fmt.Errorf("render newcomer summary prompt: %w", err)
 	}
-	summary := summarizeCommitMessage(req.CommitMessage)
+	summary := summarizeCommitMessage(req.CommitMessage, req.ChangedFiles)
 	summary = removeBannedIdentifiers(summary, req.BannedIdentifiers)
 	summary = strings.TrimSpace(summary)
-	if summary == "" || strings.Count(summary, "the feature") > 2 {
-		summary = "Add the user-visible behavior covered by the original tests."
+	if needsFallbackSummary(summary) {
+		summary = fallbackSummary(req.ChangedFiles)
+		summary = removeBannedIdentifiers(summary, req.BannedIdentifiers)
+	}
+	if needsFallbackSummary(summary) {
+		summary = "Recreate the behavior exercised by the changed tests."
 	}
 	return summary, nil
+}
+
+func SuggestedFiles(files []history.ChangedFile) []SuggestedFile {
+	out := make([]SuggestedFile, 0, len(files))
+	for _, file := range files {
+		if file.Path == "" || isDependencyOnlyFile(file.Path) {
+			continue
+		}
+		reason := "Changed source file from the selected historical task."
+		if file.Test {
+			reason = "Changed test file that describes expected behavior."
+		}
+		out = append(out, SuggestedFile{Path: file.Path, Reason: reason, Test: file.Test})
+	}
+	slices.SortFunc(out, func(a, b SuggestedFile) int {
+		if a.Test != b.Test {
+			if a.Test {
+				return 1
+			}
+			return -1
+		}
+		return strings.Compare(a.Path, b.Path)
+	})
+	return out
 }
 
 func IntroducedIdentifiers(diff string) []string {
@@ -162,18 +201,21 @@ func selectCandidate(ranked []history.CommitCandidate, difficulty int) history.C
 	}
 }
 
-func summarizeCommitMessage(message string) string {
+func summarizeCommitMessage(message string, files []history.ChangedFile) string {
 	line := strings.TrimSpace(firstLine(message))
 	line = strings.TrimSuffix(line, ".")
 	if line == "" {
 		return ""
 	}
-	line = strings.TrimSpace(strings.TrimPrefix(line, "feat:"))
-	line = strings.TrimSpace(strings.TrimPrefix(line, "feature:"))
+	line = stripCommitPrefix(line)
 	if line == "" {
 		return ""
 	}
-	return upperFirst(line) + " behavior covered by the original tests."
+	area := taskArea(files)
+	if area != "" {
+		return fmt.Sprintf("Recreate the requested %s behavior: %s. Use the changed tests as the acceptance criteria.", area, line)
+	}
+	return fmt.Sprintf("Recreate the requested behavior: %s. Use the changed tests as the acceptance criteria.", line)
 }
 
 func removeBannedIdentifiers(summary string, banned []string) string {
@@ -186,6 +228,83 @@ func removeBannedIdentifiers(summary string, banned []string) string {
 		out = regexp.MustCompile(`(?i)\b`+regexp.QuoteMeta(ident)+`\b`).ReplaceAllString(out, "the feature")
 	}
 	return strings.Join(strings.Fields(out), " ")
+}
+
+func needsFallbackSummary(summary string) bool {
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return true
+	}
+	words := strings.Fields(summary)
+	if len(words) < 6 {
+		return true
+	}
+	return strings.Count(strings.ToLower(summary), "the feature") > 1
+}
+
+func fallbackSummary(files []history.ChangedFile) string {
+	area := taskArea(files)
+	if area == "" {
+		return "Recreate the behavior exercised by the changed tests."
+	}
+	return fmt.Sprintf("Recreate the %s behavior exercised by the changed tests.", area)
+}
+
+func stripCommitPrefix(line string) string {
+	lower := strings.ToLower(line)
+	for _, prefix := range conventionalCommitPrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return strings.TrimSpace(line[len(prefix):])
+		}
+	}
+	if close := strings.Index(line, ")"); close > 0 && close+1 < len(line) && line[close+1] == ':' {
+		kind := lower[:strings.Index(lower, "(")+1]
+		for _, prefix := range conventionalCommitPrefixes {
+			if strings.TrimSuffix(prefix, ":")+"(" == kind {
+				return strings.TrimSpace(line[close+2:])
+			}
+		}
+	}
+	return strings.TrimSpace(line)
+}
+
+func taskArea(files []history.ChangedFile) string {
+	for _, file := range files {
+		if file.Test || file.Path == "" || isDependencyOnlyFile(file.Path) {
+			continue
+		}
+		dir := filepath.ToSlash(filepath.Dir(file.Path))
+		switch dir {
+		case ".", "":
+			return ""
+		default:
+			return humanizePath(dir)
+		}
+	}
+	return ""
+}
+
+func humanizePath(path string) string {
+	path = strings.Trim(path, "/.")
+	if path == "" {
+		return ""
+	}
+	parts := strings.FieldsFunc(path, func(r rune) bool {
+		return r == '/' || r == '-' || r == '_' || r == '.'
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " ")
+}
+
+func isDependencyOnlyFile(path string) bool {
+	switch filepath.ToSlash(path) {
+	case "go.mod", "go.sum", "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pyproject.toml", "poetry.lock", "requirements.txt":
+		return true
+	default:
+		return false
+	}
 }
 
 func firstLine(value string) string {
@@ -201,6 +320,8 @@ func upperFirst(value string) string {
 }
 
 var identifierPattern = regexp.MustCompile(`\b[A-Za-z_][A-Za-z0-9_]*\b`)
+
+var conventionalCommitPrefixes = []string{"feat:", "feature:", "fix:", "bugfix:", "chore:", "refactor:", "test:", "tests:"}
 
 var goKeywords = map[string]bool{
 	"break": true, "default": true, "func": true, "interface": true, "select": true,

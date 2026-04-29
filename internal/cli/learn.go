@@ -5,16 +5,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/dhruvmishra/codedojo/internal/app"
 	"github.com/dhruvmishra/codedojo/internal/cli/repl"
-	"github.com/dhruvmishra/codedojo/internal/coach"
 	"github.com/dhruvmishra/codedojo/internal/config"
-	"github.com/dhruvmishra/codedojo/internal/modes/newcomer"
-	"github.com/dhruvmishra/codedojo/internal/repo"
-	"github.com/dhruvmishra/codedojo/internal/sandbox"
-	"github.com/dhruvmishra/codedojo/internal/session"
-	"github.com/dhruvmishra/codedojo/internal/store/sqlite"
 	"github.com/spf13/cobra"
 )
 
@@ -67,81 +61,34 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 		return fmt.Errorf("--budget must be non-negative")
 	}
 
-	store, err := sqlite.Open(ctx, cfg.StorePath)
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-
-	loaded, err := loadReviewRepo(ctx, opts.Repo)
-	if err != nil {
-		return err
-	}
-	task, err := newcomer.GenerateTask(ctx, loaded, opts.Difficulty)
-	if err != nil {
-		return err
-	}
-	lang, err := repo.DetectLanguage(task.RepoPath)
-	if err != nil {
-		return err
-	}
-	if len(lang.TestCmd) == 0 {
-		return fmt.Errorf("no test command detected for repo")
-	}
-
-	sessionID := fmt.Sprintf("learn-%d", time.Now().UnixNano())
-	hintCoach, err := buildCoach(cfg, task.BannedIdentifiers)
-	if err != nil {
-		return err
-	}
-	gradeCoach, err := newBackendCoach(cfg)
-	if err != nil {
-		return err
-	}
 	selected := selectSandbox(ctx, cmd.ErrOrStderr())
-	manager := session.Manager{
-		Coach:  hintCoach,
-		Store:  store,
-		Driver: selected.driver,
-	}
-	sess := session.Session{
-		ID:         sessionID,
-		Mode:       session.ModeNewcomer,
-		Repo:       opts.Repo,
-		Task:       task.FeatureDescription,
-		HintBudget: opts.Budget,
-		StartedAt:  time.Now(),
-	}
-	box, err := manager.New(ctx, sess, selected.spec(task.RepoPath))
+	service, err := app.NewService(ctx, cfg, selected.driver, selected.spec)
 	if err != nil {
 		return err
 	}
-	defer box.Close()
-	streak, err := store.GetStreak(ctx)
+	defer service.Close()
+
+	live, err := service.StartLearn(ctx, app.StartOptions{
+		Repo:       opts.Repo,
+		Difficulty: opts.Difficulty,
+		HintBudget: opts.Budget,
+	})
 	if err != nil {
 		return err
 	}
 
 	state := &learnREPL{
-		cmd:        cmd,
-		manager:    manager,
-		store:      store,
-		box:        box,
-		testCmd:    lang.TestCmd,
-		task:       task,
-		sessionID:  sessionID,
-		startedAt:  sess.StartedAt,
-		hintLimit:  opts.Budget,
-		streak:     streak.Current,
-		gradeCoach: gradeCoach,
+		cmd:     cmd,
+		service: service,
+		live:    live,
 	}
 	ui := themeFor(cmd)
 	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\nNewcomer task ready. Difficulty %d. Streak %d.\n%s %s\nType help for commands.\n",
 		ui.Banner("Newcomer mode"),
 		opts.Difficulty,
-		streak.Current,
+		live.Streak,
 		ui.Label("Feature"),
-		task.FeatureDescription,
+		live.Task,
 	); err != nil {
 		return err
 	}
@@ -154,20 +101,9 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 }
 
 type learnREPL struct {
-	cmd        *cobra.Command
-	manager    session.Manager
-	store      *sqlite.Store
-	box        sandbox.Session
-	testCmd    []string
-	task       newcomer.Task
-	sessionID  string
-	startedAt  time.Time
-	hintLimit  int
-	hintCosts  []int
-	hintsUsed  int
-	streak     int
-	done       bool
-	gradeCoach coach.Coach
+	cmd     *cobra.Command
+	service *app.Service
+	live    *app.LiveSession
 }
 
 func (l *learnREPL) handle(ctx context.Context, line string, next repl.LineSource) error {
@@ -191,8 +127,8 @@ func (l *learnREPL) handle(ctx context.Context, line string, next repl.LineSourc
 	case "submit":
 		return l.submit(ctx)
 	case "quit", "exit":
-		if !l.done {
-			_ = l.manager.Close(ctx, l.sessionID, l.box)
+		if !l.live.Done {
+			_ = l.service.CloseSession(ctx, l.live.ID)
 		}
 		return repl.ErrExit
 	default:
@@ -217,7 +153,7 @@ func (l *learnREPL) help() error {
 }
 
 func (l *learnREPL) tests(ctx context.Context) error {
-	result, err := l.box.Exec(ctx, l.testCmd)
+	result, err := l.service.RunTests(ctx, l.live.ID)
 	if err != nil {
 		return err
 	}
@@ -247,22 +183,19 @@ func (l *learnREPL) cat(path string) error {
 	if path == "" {
 		return fmt.Errorf("usage: cat <file>")
 	}
-	data, err := l.box.ReadFile(path)
+	data, err := l.service.ReadFile(l.live.ID, path)
 	if err != nil {
 		return err
 	}
 	ui := themeFor(l.cmd)
-	_, err = fmt.Fprint(l.cmd.OutOrStdout(), ui.Box(path, string(data)))
+	_, err = fmt.Fprint(l.cmd.OutOrStdout(), ui.Box(path, data))
 	return err
 }
 
 func (l *learnREPL) diff() error {
-	diff, err := l.box.Diff()
+	diff, err := l.service.Diff(l.live.ID)
 	if err != nil {
 		return err
-	}
-	if diff == "" {
-		diff = "(no local edits)\n"
 	}
 	ui := themeFor(l.cmd)
 	_, err = fmt.Fprint(l.cmd.OutOrStdout(), ui.Box("diff", diff))
@@ -291,7 +224,7 @@ func (l *learnREPL) write(path string, next repl.LineSource) error {
 	if len(lines) > 0 {
 		content += "\n"
 	}
-	if err := l.box.WriteFile(path, []byte(content)); err != nil {
+	if err := l.service.WriteFile(l.live.ID, path, content); err != nil {
 		return err
 	}
 	ui := themeFor(l.cmd)
@@ -300,82 +233,44 @@ func (l *learnREPL) write(path string, next repl.LineSource) error {
 }
 
 func (l *learnREPL) hint(ctx context.Context, name string) error {
-	if l.hintsUsed >= l.hintLimit {
-		ui := themeFor(l.cmd)
-		_, err := fmt.Fprintln(l.cmd.OutOrStdout(), ui.Warning("hint budget exhausted"))
-		return err
-	}
 	level, err := parseHintLevel(name)
 	if err != nil {
 		return err
 	}
-	hint, err := l.manager.RequestHint(ctx, l.sessionID, level, l.task.FeatureDescription)
+	hint, err := l.service.Hint(ctx, l.live.ID, level)
 	if err != nil {
+		if strings.Contains(err.Error(), "hint budget exhausted") {
+			ui := themeFor(l.cmd)
+			_, writeErr := fmt.Fprintln(l.cmd.OutOrStdout(), ui.Warning("hint budget exhausted"))
+			return writeErr
+		}
 		return err
 	}
-	l.hintsUsed++
-	l.hintCosts = append(l.hintCosts, hint.Cost)
 	ui := themeFor(l.cmd)
-	_, err = fmt.Fprintf(l.cmd.OutOrStdout(), "%s %s\n", ui.Label("hint"), ui.Hint(hint.Content))
+	_, err = fmt.Fprintf(l.cmd.OutOrStdout(), "%s %s\n", ui.Label("hint"), ui.Hint(hint.Hint))
 	return err
 }
 
 func (l *learnREPL) submit(ctx context.Context) error {
-	if err := l.manager.Submit(ctx, l.sessionID, "newcomer-submission"); err != nil {
-		return err
-	}
-	userDiff, err := l.box.Diff()
+	result, err := l.service.SubmitLearn(ctx, l.live.ID)
 	if err != nil {
 		return err
 	}
-	result, err := newcomer.Grade(ctx, l.task, newcomer.Submission{
-		SessionID:    l.sessionID,
-		UserDiff:     userDiff,
-		NewTestFuncs: newcomer.CountNewTestFuncs(userDiff),
-		HintCosts:    l.hintCosts,
-		StartedAt:    l.startedAt,
-		SubmittedAt:  time.Now(),
-		Streak:       l.streak,
-	}, newcomer.GradeOptions{
-		Coach:   l.gradeCoach,
-		TestCmd: l.testCmd,
-		Sandbox: l.box,
-	})
-	if err != nil {
-		return err
-	}
-	if err := l.store.UpsertScore(ctx, l.sessionID, result.Score); err != nil {
-		return err
-	}
-	if err := l.store.UpdateState(ctx, l.sessionID, session.StateGraded); err != nil {
-		return err
-	}
-	if err := l.store.AppendEvent(ctx, session.Event{SessionID: l.sessionID, Type: session.EventGrade, Payload: fmt.Sprintf("score=%d", result.Score)}); err != nil {
-		return err
-	}
-	streak, err := l.store.RecordStreakResult(ctx, result.Score > 0)
-	if err != nil {
-		return err
-	}
-	if err := l.manager.Close(ctx, l.sessionID, l.box); err != nil {
-		return err
-	}
-	l.done = true
 	out := l.cmd.OutOrStdout()
 	ui := themeFor(l.cmd)
 	if _, err := fmt.Fprintf(out, "%s\nscore: %s\ncorrectness: %d approach: %d tests: %d hints: -%d streak: %d\n%s\n",
 		ui.Banner("Result"),
 		ui.Score(strconv.Itoa(result.Score)),
-		result.CorrectnessScore,
-		result.ApproachScore,
-		result.TestQualityScore,
-		result.HintDeduction,
-		streak.Current,
-		result.ApproachFeedback,
+		result.Breakdown["correctness"],
+		result.Breakdown["approach"],
+		result.Breakdown["tests"],
+		-result.Breakdown["hints"],
+		result.CurrentStreak,
+		result.Feedback,
 	); err != nil {
 		return err
 	}
-	if result.CorrectnessScore == 0 {
+	if result.Breakdown["correctness"] == 0 {
 		if _, err := fmt.Fprintf(out, "tests still failing (exit %d)\n", result.TestExitCode); err != nil {
 			return err
 		}
