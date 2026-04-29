@@ -6,3 +6,5 @@ coverage.out
 *.db
 .codedojo/
 ~/.codedojo
+/docs/IMPLEMENTATION_PLAN.md
+/docs/plan.md

@@ -12,7 +12,6 @@ import (
 
 	"github.com/dhruvmishra/codedojo/internal/cli/repl"
 	"github.com/dhruvmishra/codedojo/internal/coach"
-	"github.com/dhruvmishra/codedojo/internal/coach/mock"
 	"github.com/dhruvmishra/codedojo/internal/config"
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer"
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate"
@@ -103,8 +102,21 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 	}
 
 	sessionID := fmt.Sprintf("review-%d", time.Now().UnixNano())
+	bannedIdents := []string{
+		task.MutationLog.Mutation.Operator,
+		task.MutationLog.Mutation.Original,
+		task.MutationLog.Mutation.Mutated,
+	}
+	hintCoach, err := buildCoach(cfg, bannedIdents)
+	if err != nil {
+		return err
+	}
+	gradeCoach, err := newBackendCoach(cfg)
+	if err != nil {
+		return err
+	}
 	manager := session.Manager{
-		Coach:  coach.RetryWithStricterPrompt(mock.Coach{}, nil),
+		Coach:  hintCoach,
 		Store:  store,
 		Driver: local.Driver{},
 	}
@@ -126,15 +138,16 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 	}
 
 	state := &reviewREPL{
-		cmd:       cmd,
-		manager:   manager,
-		store:     store,
-		box:       box,
-		testCmd:   lang.TestCmd,
-		task:      task,
-		sessionID: sessionID,
-		startedAt: sess.StartedAt,
-		hintLimit: opts.Budget,
+		cmd:        cmd,
+		manager:    manager,
+		store:      store,
+		box:        box,
+		testCmd:    lang.TestCmd,
+		task:       task,
+		sessionID:  sessionID,
+		startedAt:  sess.StartedAt,
+		hintLimit:  opts.Budget,
+		gradeCoach: gradeCoach,
 	}
 	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Reviewer task ready. Difficulty %d. Type help for commands.\n", opts.Difficulty); err != nil {
 		return err
@@ -148,18 +161,19 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 }
 
 type reviewREPL struct {
-	cmd       *cobra.Command
-	manager   session.Manager
-	store     *sqlite.Store
-	box       sandbox.Session
-	testCmd   []string
-	task      reviewer.Task
-	sessionID string
-	startedAt time.Time
-	hintLimit int
-	hintCosts []int
-	hintsUsed int
-	done      bool
+	cmd        *cobra.Command
+	manager    session.Manager
+	store      *sqlite.Store
+	box        sandbox.Session
+	testCmd    []string
+	task       reviewer.Task
+	sessionID  string
+	startedAt  time.Time
+	hintLimit  int
+	hintCosts  []int
+	hintsUsed  int
+	done       bool
+	gradeCoach coach.Coach
 }
 
 func (r *reviewREPL) handle(ctx context.Context, line string) error {
@@ -295,7 +309,7 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 		HintCosts:     r.hintCosts,
 		StartedAt:     r.startedAt,
 		SubmittedAt:   time.Now(),
-	}, r.task.MutationLog, reviewer.GradeOptions{Coach: mock.Coach{}})
+	}, r.task.MutationLog, reviewer.GradeOptions{Coach: r.gradeCoach})
 	if err != nil {
 		return err
 	}

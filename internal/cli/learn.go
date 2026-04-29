@@ -8,7 +8,6 @@ import (
 
 	"github.com/dhruvmishra/codedojo/internal/cli/repl"
 	"github.com/dhruvmishra/codedojo/internal/coach"
-	"github.com/dhruvmishra/codedojo/internal/coach/mock"
 	"github.com/dhruvmishra/codedojo/internal/config"
 	"github.com/dhruvmishra/codedojo/internal/modes/newcomer"
 	"github.com/dhruvmishra/codedojo/internal/repo"
@@ -91,8 +90,16 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 	}
 
 	sessionID := fmt.Sprintf("learn-%d", time.Now().UnixNano())
+	hintCoach, err := buildCoach(cfg, task.BannedIdentifiers)
+	if err != nil {
+		return err
+	}
+	gradeCoach, err := newBackendCoach(cfg)
+	if err != nil {
+		return err
+	}
 	manager := session.Manager{
-		Coach:  coach.RetryWithStricterPrompt(mock.Coach{}, nil),
+		Coach:  hintCoach,
 		Store:  store,
 		Driver: local.Driver{},
 	}
@@ -111,15 +118,16 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 	defer box.Close()
 
 	state := &learnREPL{
-		cmd:       cmd,
-		manager:   manager,
-		store:     store,
-		box:       box,
-		testCmd:   lang.TestCmd,
-		task:      task,
-		sessionID: sessionID,
-		startedAt: sess.StartedAt,
-		hintLimit: opts.Budget,
+		cmd:        cmd,
+		manager:    manager,
+		store:      store,
+		box:        box,
+		testCmd:    lang.TestCmd,
+		task:       task,
+		sessionID:  sessionID,
+		startedAt:  sess.StartedAt,
+		hintLimit:  opts.Budget,
+		gradeCoach: gradeCoach,
 	}
 	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Newcomer task ready. Difficulty %d.\nFeature: %s\nType help for commands.\n", opts.Difficulty, task.FeatureDescription); err != nil {
 		return err
@@ -133,18 +141,19 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 }
 
 type learnREPL struct {
-	cmd       *cobra.Command
-	manager   session.Manager
-	store     *sqlite.Store
-	box       sandbox.Session
-	testCmd   []string
-	task      newcomer.Task
-	sessionID string
-	startedAt time.Time
-	hintLimit int
-	hintCosts []int
-	hintsUsed int
-	done      bool
+	cmd        *cobra.Command
+	manager    session.Manager
+	store      *sqlite.Store
+	box        sandbox.Session
+	testCmd    []string
+	task       newcomer.Task
+	sessionID  string
+	startedAt  time.Time
+	hintLimit  int
+	hintCosts  []int
+	hintsUsed  int
+	done       bool
+	gradeCoach coach.Coach
 }
 
 func (l *learnREPL) handle(ctx context.Context, line string, next repl.LineSource) error {
@@ -302,7 +311,7 @@ func (l *learnREPL) submit(ctx context.Context) error {
 		StartedAt:    l.startedAt,
 		SubmittedAt:  time.Now(),
 	}, newcomer.GradeOptions{
-		Coach:   mock.Coach{},
+		Coach:   l.gradeCoach,
 		TestCmd: l.testCmd,
 		Sandbox: l.box,
 	})
