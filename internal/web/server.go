@@ -3,7 +3,6 @@ package web
 import (
 	"embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -38,6 +37,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) routes(static http.FileSystem) {
 	s.mux.HandleFunc("GET /api/health", s.health)
+	s.mux.HandleFunc("POST /api/preflight", s.preflight)
 	s.mux.HandleFunc("POST /api/sessions/learn", s.startLearn)
 	s.mux.HandleFunc("POST /api/sessions/review", s.startReview)
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
@@ -54,6 +54,21 @@ func (s *Server) routes(static http.FileSystem) {
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) preflight(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Repo string `json:"repo"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	result, err := s.app.Preflight(r.Context(), req.Repo)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) startLearn(w http.ResponseWriter, r *http.Request) {
@@ -213,16 +228,17 @@ func parseHintLevel(value string) coach.HintLevel {
 }
 
 type sessionResponse struct {
-	ID         string       `json:"id"`
-	Mode       session.Mode `json:"mode"`
-	Repo       string       `json:"repo"`
-	Task       string       `json:"task"`
-	Difficulty int          `json:"difficulty"`
-	HintBudget int          `json:"hint_budget"`
-	HintsUsed  int          `json:"hints_used"`
-	Streak     int          `json:"streak"`
-	StartedAt  string       `json:"started_at"`
-	Done       bool         `json:"done"`
+	ID         string         `json:"id"`
+	Mode       session.Mode   `json:"mode"`
+	Repo       string         `json:"repo"`
+	Task       string         `json:"task"`
+	TaskFiles  []app.TaskFile `json:"task_files,omitempty"`
+	Difficulty int            `json:"difficulty"`
+	HintBudget int            `json:"hint_budget"`
+	HintsUsed  int            `json:"hints_used"`
+	Streak     int            `json:"streak"`
+	StartedAt  string         `json:"started_at"`
+	Done       bool           `json:"done"`
 }
 
 func publicSession(live *app.LiveSession) sessionResponse {
@@ -231,6 +247,7 @@ func publicSession(live *app.LiveSession) sessionResponse {
 		Mode:       live.Mode,
 		Repo:       live.Repo,
 		Task:       live.Task,
+		TaskFiles:  live.TaskFiles,
 		Difficulty: live.Difficulty,
 		HintBudget: live.HintBudget,
 		HintsUsed:  live.HintsUsed,
@@ -256,9 +273,6 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func writeError(w http.ResponseWriter, err error) {
-	status := http.StatusBadRequest
-	if errors.Is(err, http.ErrNoLocation) {
-		status = http.StatusNotFound
-	}
-	writeJSON(w, status, map[string]string{"error": err.Error()})
+	product := app.ExplainError(err)
+	writeJSON(w, product.Status, product)
 }

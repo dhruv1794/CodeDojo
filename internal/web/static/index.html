@@ -9,23 +9,62 @@
   <body>
     <main class="app">
       <section class="setup" id="setup">
-        <div>
-          <p class="eyebrow">CodeDojo local</p>
-          <h1>Practice on a real repository</h1>
+        <div class="setup-hero">
+          <div>
+            <p class="eyebrow">CodeDojo local</p>
+            <h1>Practice on a real repository</h1>
+            <p class="hero-copy">Run a focused Learn or Review session against a local practice copy, with tests, hints, and grading in one workspace.</p>
+          </div>
+          <div class="hero-signal" aria-hidden="true">
+            <div class="signal-row">
+              <span>repo scan</span>
+              <strong id="hero-scan-state">waiting</strong>
+            </div>
+            <div class="signal-row">
+              <span>practice loop</span>
+              <strong>inspect -> test -> submit</strong>
+            </div>
+            <div class="signal-bars">
+              <span></span>
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
         </div>
-        <form id="start-form" class="panel">
+        <form id="start-form" class="panel setup-form">
           <label>
             Repository
             <input id="repo" name="repo" placeholder="/path/to/repo or git URL" required>
           </label>
-          <div class="row">
-            <label>
-              Mode
-              <select id="mode" name="mode">
-                <option value="learn">Learn</option>
-                <option value="review">Review</option>
-              </select>
-            </label>
+          <input id="mode" name="mode" type="hidden" value="review">
+          <div id="preflight" class="preflight" role="status" aria-live="polite"></div>
+
+          <div class="mode-grid" aria-label="Session mode">
+            <button id="review-card" class="mode-card selected" type="button" data-mode="review">
+              <span class="mode-card-top">
+                <strong>Review</strong>
+                <span id="review-badge" class="mode-badge">Recommended</span>
+              </span>
+              <span class="mode-summary">For developers training AI-code review instincts.</span>
+              <span class="mode-detail">Find the hidden bug, select its location, and explain the diagnosis.</span>
+              <span id="review-language" class="mode-meta">5-15 minutes · Go repositories</span>
+              <span id="review-status" class="mode-status">Check a repository to confirm availability.</span>
+            </button>
+
+            <button id="learn-card" class="mode-card" type="button" data-mode="learn">
+              <span class="mode-card-top">
+                <strong>Learn</strong>
+                <span id="learn-badge" class="mode-badge hidden">Recommended</span>
+              </span>
+              <span class="mode-summary">For developers learning a codebase through active recall.</span>
+              <span class="mode-detail">Rebuild a real historical change, run tests, and submit the implementation.</span>
+              <span id="learn-language" class="mode-meta">15-45 minutes · Commit history</span>
+              <span id="learn-status" class="mode-status">Check a repository to confirm availability.</span>
+            </button>
+          </div>
+
+          <div class="setup-options">
             <label>
               Difficulty
               <input id="difficulty" name="difficulty" type="number" min="1" max="5" value="3">
@@ -35,7 +74,7 @@
               <input id="hint-budget" name="hint-budget" type="number" min="0" max="10" value="3">
             </label>
           </div>
-          <button type="submit">Start session</button>
+          <button id="start-button" type="submit">Start session</button>
         </form>
       </section>
 
@@ -48,17 +87,33 @@
           <div class="stats">
             <span id="difficulty-label">D3</span>
             <span id="streak-label">Streak 0</span>
-            <span id="hint-label">Hints 0/0</span>
+            <span id="hint-label">Hint budget 0/0</span>
+            <span id="timer-label">00:00</span>
+            <span id="progress-label">0/0 steps</span>
           </div>
         </header>
 
         <div class="grid">
-          <aside class="panel files">
-            <div class="panel-head">
-              <strong>Files</strong>
-              <button id="refresh-files" type="button">Refresh</button>
-            </div>
-            <div id="file-list" class="file-list"></div>
+          <aside class="left-rail">
+            <section class="panel guide">
+              <div class="panel-head">
+                <strong>Practice path</strong>
+              </div>
+              <ol id="checklist" class="checklist"></ol>
+              <div id="next-action" class="next-action"></div>
+              <div class="suggested">
+                <strong id="suggested-title">Suggested files</strong>
+                <div id="suggested-files" class="suggested-files empty-state">Start a session to see suggested files.</div>
+              </div>
+            </section>
+
+            <section class="panel files">
+              <div class="panel-head">
+                <strong>Files</strong>
+                <button id="refresh-files" type="button">Refresh</button>
+              </div>
+              <div id="file-list" class="file-list empty-state">Start a session to load files.</div>
+            </section>
           </aside>
 
           <section class="panel editor">
@@ -73,35 +128,89 @@
           </section>
 
           <aside class="panel tools">
-            <div class="actions">
-              <button id="run-tests" type="button">Run tests</button>
-              <button id="show-diff" type="button">Diff</button>
-              <select id="hint-level">
-                <option value="nudge">Nudge</option>
-                <option value="question">Question</option>
-                <option value="pointer">Pointer</option>
-                <option value="concept">Concept</option>
-              </select>
-              <button id="ask-hint" type="button">Hint</button>
+            <div class="tabs" role="tablist" aria-label="Practice tools">
+              <button id="tab-tests" class="tab active" type="button" role="tab" aria-controls="panel-tests" aria-selected="true" data-panel="tests">Tests</button>
+              <button id="tab-diff" class="tab" type="button" role="tab" aria-controls="panel-diff" aria-selected="false" data-panel="diff">Diff</button>
+              <button id="tab-hints" class="tab" type="button" role="tab" aria-controls="panel-hints" aria-selected="false" data-panel="hints">Hints</button>
+              <button id="tab-submit" class="tab" type="button" role="tab" aria-controls="panel-submit" aria-selected="false" data-panel="submit">Submit</button>
+              <button id="tab-result" class="tab" type="button" role="tab" aria-controls="panel-result" aria-selected="false" data-panel="result">Result</button>
             </div>
 
-            <section>
-              <h3>Output</h3>
-              <pre id="output"></pre>
-            </section>
-
-            <section id="review-submit" class="submit hidden">
-              <h3>Review submission</h3>
-              <input id="review-file" placeholder="file path">
-              <div class="row">
-                <input id="review-start" type="number" min="1" placeholder="start">
-                <input id="review-end" type="number" min="1" placeholder="end">
+            <section id="panel-tests" class="tab-panel" role="tabpanel" aria-labelledby="tab-tests">
+              <div class="tool-head">
+                <div>
+                  <h3>Tests</h3>
+                  <p>Run the repository checks inside the practice copy.</p>
+                </div>
+                <button id="run-tests" type="button">Run tests</button>
               </div>
-              <input id="review-operator" placeholder="operator class">
-              <textarea id="review-diagnosis" placeholder="diagnosis"></textarea>
+              <pre id="tests-output" class="empty-output">No test run yet.</pre>
             </section>
 
-            <button id="submit" type="button" class="primary">Submit</button>
+            <section id="panel-diff" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-diff">
+              <div class="tool-head">
+                <div>
+                  <h3 id="diff-title">Practice copy diff</h3>
+                  <p id="diff-help">Review your local edits before submitting.</p>
+                </div>
+                <button id="show-diff" type="button">Show diff</button>
+              </div>
+              <pre id="diff-output" class="empty-output">Open this panel after making edits or when you want to inspect the practice copy.</pre>
+            </section>
+
+            <section id="panel-hints" class="tab-panel hidden" role="tabpanel" aria-labelledby="tab-hints">
+              <div class="tool-head">
+                <div>
+                  <h3>Hints</h3>
+                  <p id="hint-help">Spend from the hint budget when you want a nudge.</p>
+                </div>
+              </div>
+              <div class="hint-actions">
+                <select id="hint-level">
+                  <option value="nudge">Nudge</option>
+                  <option value="question">Question</option>
+                  <option value="pointer">Pointer</option>
+                  <option value="concept">Concept</option>
+                </select>
+                <button id="ask-hint" type="button">Ask</button>
+              </div>
+              <pre id="hint-output" class="empty-output">No hints used yet.</pre>
+            </section>
+
+            <section id="panel-submit" class="tab-panel hidden submit" role="tabpanel" aria-labelledby="tab-submit">
+              <div id="review-submit" class="review-submit hidden">
+                <h3>Hidden bug submission</h3>
+                <p>Select the hidden bug location in the gutter, confirm the file/range, and explain what is wrong.</p>
+                <div id="review-selection-summary" class="submission-summary empty-state">No hidden bug location selected yet.</div>
+                <div class="selection-actions">
+                  <button id="use-current-file" type="button">Use current file</button>
+                  <button id="clear-selection" type="button">Clear selection</button>
+                </div>
+                <input id="review-file" placeholder="file path">
+                <div class="row">
+                  <input id="review-start" type="number" min="1" placeholder="start">
+                  <input id="review-end" type="number" min="1" placeholder="end">
+                </div>
+                <input id="review-operator" placeholder="issue type">
+                <textarea id="review-diagnosis" placeholder="diagnosis"></textarea>
+              </div>
+
+              <div id="learn-submit" class="learn-submit hidden">
+                <h3>Reference solution submission</h3>
+                <p>Submit your implementation after tests and diff review. The reference solution is revealed after grading.</p>
+                <ul id="learn-presubmit" class="presubmit-checklist"></ul>
+              </div>
+
+              <button id="submit" type="button" class="primary">Submit</button>
+            </section>
+
+            <section id="panel-result" class="tab-panel hidden result-panel" role="tabpanel" aria-labelledby="tab-result">
+              <h3>Result</h3>
+              <div id="result-summary" class="result-summary empty-state">Submit a session to see your score, feedback, and reveal.</div>
+              <div id="result-details" class="result-details"></div>
+              <pre id="result-output" class="empty-output">No result yet.</pre>
+              <button id="start-another" type="button">Start another session</button>
+            </section>
           </aside>
         </div>
       </section>

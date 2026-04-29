@@ -3,23 +3,14 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/dhruvmishra/codedojo/internal/app"
 	"github.com/dhruvmishra/codedojo/internal/cli/repl"
 	"github.com/dhruvmishra/codedojo/internal/coach"
 	"github.com/dhruvmishra/codedojo/internal/config"
-	"github.com/dhruvmishra/codedojo/internal/modes/reviewer"
-	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate"
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate/op"
-	"github.com/dhruvmishra/codedojo/internal/repo"
-	"github.com/dhruvmishra/codedojo/internal/sandbox"
-	"github.com/dhruvmishra/codedojo/internal/session"
-	"github.com/dhruvmishra/codedojo/internal/store/sqlite"
 	"github.com/spf13/cobra"
 )
 
@@ -72,93 +63,32 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 		return fmt.Errorf("--budget must be non-negative")
 	}
 
-	store, err := sqlite.Open(ctx, cfg.StorePath)
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-
-	loaded, err := loadReviewRepo(ctx, opts.Repo)
-	if err != nil {
-		return err
-	}
-	task, err := reviewer.GenerateTask(ctx, loaded, opts.Difficulty)
-	if err != nil {
-		return err
-	}
-	if err := hideMutationLog(task.RepoPath); err != nil {
-		return err
-	}
-	if err := stageReviewBaseline(ctx, task.RepoPath); err != nil {
-		return err
-	}
-	lang, err := repo.DetectLanguage(task.RepoPath)
-	if err != nil {
-		return err
-	}
-	if len(lang.TestCmd) == 0 {
-		return fmt.Errorf("no test command detected for repo")
-	}
-
-	sessionID := fmt.Sprintf("review-%d", time.Now().UnixNano())
-	bannedIdents := []string{
-		task.MutationLog.Mutation.Operator,
-		task.MutationLog.Mutation.Original,
-		task.MutationLog.Mutation.Mutated,
-	}
-	hintCoach, err := buildCoach(cfg, bannedIdents)
-	if err != nil {
-		return err
-	}
-	gradeCoach, err := newBackendCoach(cfg)
-	if err != nil {
-		return err
-	}
 	selected := selectSandbox(ctx, cmd.ErrOrStderr())
-	manager := session.Manager{
-		Coach:  hintCoach,
-		Store:  store,
-		Driver: selected.driver,
-	}
-	sess := session.Session{
-		ID:         sessionID,
-		Mode:       session.ModeReviewer,
-		Repo:       opts.Repo,
-		Task:       task.Instructions,
-		HintBudget: opts.Budget,
-		StartedAt:  time.Now(),
-	}
-	box, err := manager.New(ctx, sess, selected.spec(task.RepoPath))
+	service, err := app.NewService(ctx, cfg, selected.driver, selected.spec)
 	if err != nil {
 		return err
 	}
-	defer box.Close()
-	if err := store.SaveMutationLog(ctx, sessionID, task.MutationLog); err != nil {
-		return err
-	}
-	streak, err := store.GetStreak(ctx)
+	defer service.Close()
+
+	live, err := service.StartReview(ctx, app.StartOptions{
+		Repo:       opts.Repo,
+		Difficulty: opts.Difficulty,
+		HintBudget: opts.Budget,
+	})
 	if err != nil {
 		return err
 	}
 
 	state := &reviewREPL{
-		cmd:        cmd,
-		manager:    manager,
-		store:      store,
-		box:        box,
-		testCmd:    lang.TestCmd,
-		task:       task,
-		sessionID:  sessionID,
-		startedAt:  sess.StartedAt,
-		hintLimit:  opts.Budget,
-		streak:     streak.Current,
-		gradeCoach: gradeCoach,
+		cmd:     cmd,
+		service: service,
+		live:    live,
 	}
 	ui := themeFor(cmd)
 	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\nReviewer task ready. Difficulty %d. Streak %d. Type help for commands.\n",
 		ui.Banner("Reviewer mode"),
 		opts.Difficulty,
-		streak.Current,
+		live.Streak,
 	); err != nil {
 		return err
 	}
@@ -171,20 +101,9 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 }
 
 type reviewREPL struct {
-	cmd        *cobra.Command
-	manager    session.Manager
-	store      *sqlite.Store
-	box        sandbox.Session
-	testCmd    []string
-	task       reviewer.Task
-	sessionID  string
-	startedAt  time.Time
-	hintLimit  int
-	hintCosts  []int
-	hintsUsed  int
-	streak     int
-	done       bool
-	gradeCoach coach.Coach
+	cmd     *cobra.Command
+	service *app.Service
+	live    *app.LiveSession
 }
 
 func (r *reviewREPL) handle(ctx context.Context, line string) error {
@@ -206,8 +125,8 @@ func (r *reviewREPL) handle(ctx context.Context, line string) error {
 	case "submit":
 		return r.submit(ctx, strings.TrimSpace(rest))
 	case "quit", "exit":
-		if !r.done {
-			_ = r.manager.Close(ctx, r.sessionID, r.box)
+		if !r.live.Done {
+			_ = r.service.CloseSession(ctx, r.live.ID)
 		}
 		return repl.ErrExit
 	default:
@@ -231,7 +150,7 @@ func (r *reviewREPL) help() error {
 }
 
 func (r *reviewREPL) tests(ctx context.Context) error {
-	result, err := r.box.Exec(ctx, r.testCmd)
+	result, err := r.service.RunTests(ctx, r.live.ID)
 	if err != nil {
 		return err
 	}
@@ -261,22 +180,19 @@ func (r *reviewREPL) cat(path string) error {
 	if path == "" {
 		return fmt.Errorf("usage: cat <file>")
 	}
-	data, err := r.box.ReadFile(path)
+	data, err := r.service.ReadFile(r.live.ID, path)
 	if err != nil {
 		return err
 	}
 	ui := themeFor(r.cmd)
-	_, err = fmt.Fprint(r.cmd.OutOrStdout(), ui.Box(path, string(data)))
+	_, err = fmt.Fprint(r.cmd.OutOrStdout(), ui.Box(path, data))
 	return err
 }
 
 func (r *reviewREPL) diff() error {
-	diff, err := r.box.Diff()
+	diff, err := r.service.Diff(r.live.ID)
 	if err != nil {
 		return err
-	}
-	if diff == "" {
-		diff = "(no local edits)\n"
 	}
 	ui := themeFor(r.cmd)
 	_, err = fmt.Fprint(r.cmd.OutOrStdout(), ui.Box("diff", diff))
@@ -284,23 +200,21 @@ func (r *reviewREPL) diff() error {
 }
 
 func (r *reviewREPL) hint(ctx context.Context, name string) error {
-	if r.hintsUsed >= r.hintLimit {
-		ui := themeFor(r.cmd)
-		_, err := fmt.Fprintln(r.cmd.OutOrStdout(), ui.Warning("hint budget exhausted"))
-		return err
-	}
 	level, err := parseHintLevel(name)
 	if err != nil {
 		return err
 	}
-	hint, err := r.manager.RequestHint(ctx, r.sessionID, level, r.task.Instructions)
+	hint, err := r.service.Hint(ctx, r.live.ID, level)
 	if err != nil {
+		if strings.Contains(err.Error(), "hint budget exhausted") {
+			ui := themeFor(r.cmd)
+			_, writeErr := fmt.Fprintln(r.cmd.OutOrStdout(), ui.Warning("hint budget exhausted"))
+			return writeErr
+		}
 		return err
 	}
-	r.hintsUsed++
-	r.hintCosts = append(r.hintCosts, hint.Cost)
 	ui := themeFor(r.cmd)
-	_, err = fmt.Fprintf(r.cmd.OutOrStdout(), "%s %s\n", ui.Label("hint"), ui.Hint(hint.Content))
+	_, err = fmt.Fprintf(r.cmd.OutOrStdout(), "%s %s\n", ui.Label("hint"), ui.Hint(hint.Hint))
 	return err
 }
 
@@ -317,91 +231,32 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 		return err
 	}
 	operator := inferOperatorClass(diagnosis)
-	if err := r.manager.Submit(ctx, r.sessionID, text); err != nil {
-		return err
-	}
-	result, err := reviewer.Grade(ctx, reviewer.Submission{
-		SessionID:     r.sessionID,
+	result, err := r.service.SubmitReview(ctx, r.live.ID, app.ReviewSubmission{
 		FilePath:      file,
 		StartLine:     start,
 		EndLine:       end,
 		OperatorClass: operator,
 		Diagnosis:     diagnosis,
-		HintCosts:     r.hintCosts,
-		StartedAt:     r.startedAt,
-		SubmittedAt:   time.Now(),
-		Streak:        r.streak,
-	}, r.task.MutationLog, reviewer.GradeOptions{Coach: r.gradeCoach})
+	})
 	if err != nil {
 		return err
 	}
-	if err := r.store.UpsertScore(ctx, r.sessionID, result.Score); err != nil {
-		return err
-	}
-	if err := r.store.UpdateState(ctx, r.sessionID, session.StateGraded); err != nil {
-		return err
-	}
-	if err := r.store.AppendEvent(ctx, session.Event{SessionID: r.sessionID, Type: session.EventGrade, Payload: fmt.Sprintf("score=%d", result.Score)}); err != nil {
-		return err
-	}
-	streak, err := r.store.RecordStreakResult(ctx, result.Score > 0)
-	if err != nil {
-		return err
-	}
-	if err := r.manager.Close(ctx, r.sessionID, r.box); err != nil {
-		return err
-	}
-	r.done = true
 	ui := themeFor(r.cmd)
 	if _, err := fmt.Fprintf(r.cmd.OutOrStdout(), "%s\nscore: %s\nfile: %d line: %d operator: %d diagnosis: %d hints: -%d time: %d streak: %d\n%s\n",
 		ui.Banner("Result"),
 		ui.Score(strconv.Itoa(result.Score)),
-		result.FileScore,
-		result.LineScore,
-		result.OperatorScore,
-		result.DiagnosisScore,
-		result.HintDeduction,
-		result.TimeBonus,
-		streak.Current,
-		result.DiagnosisFeedback,
+		result.Breakdown["file"],
+		result.Breakdown["line"],
+		result.Breakdown["operator"],
+		result.Breakdown["diagnosis"],
+		-result.Breakdown["hints"],
+		result.Breakdown["time"],
+		result.CurrentStreak,
+		result.Feedback,
 	); err != nil {
 		return err
 	}
 	return repl.ErrExit
-}
-
-func loadReviewRepo(ctx context.Context, source string) (repo.Repo, error) {
-	if info, err := os.Stat(source); err == nil && info.IsDir() {
-		return repo.OpenLocal(source)
-	}
-	tmp, err := os.MkdirTemp("", "codedojo-clone-*")
-	if err != nil {
-		return repo.Repo{}, fmt.Errorf("create clone temp dir: %w", err)
-	}
-	loaded, err := repo.Clone(ctx, source, tmp)
-	if err != nil {
-		_ = os.RemoveAll(tmp)
-		return repo.Repo{}, err
-	}
-	return loaded, nil
-}
-
-func hideMutationLog(repoPath string) error {
-	logPath := filepath.Join(repoPath, mutate.DefaultLogPath)
-	if err := os.Remove(logPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("hide mutation log: %w", err)
-	}
-	_ = os.Remove(filepath.Dir(logPath))
-	return nil
-}
-
-func stageReviewBaseline(ctx context.Context, repoPath string) error {
-	cmd := exec.CommandContext(ctx, "git", "add", "--", ".")
-	cmd.Dir = repoPath
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("stage reviewer baseline: %w: %s", err, out)
-	}
-	return nil
 }
 
 func parseHintLevel(name string) (coach.HintLevel, error) {

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dhruvmishra/codedojo/internal/modes/newcomer/history"
 	"github.com/dhruvmishra/codedojo/internal/repo"
 	gogit "github.com/go-git/go-git/v5"
 )
@@ -29,8 +30,17 @@ func TestGenerateTaskRevertsRankedCommitAndStripsIdentifiers(t *testing.T) {
 	if task.StartingSHA == "" || task.StartingSHA == featureSHA {
 		t.Fatalf("StartingSHA = %q, want parent", task.StartingSHA)
 	}
-	if !strings.Contains(task.FeatureDescription, "Add multiplication behavior covered by the original tests.") {
+	if !strings.Contains(task.FeatureDescription, "Recreate the requested calculator behavior: add multiplication.") {
 		t.Fatalf("FeatureDescription = %q, want snapshot summary", task.FeatureDescription)
+	}
+	if len(task.SuggestedFiles) != 2 {
+		t.Fatalf("SuggestedFiles = %#v, want source and test suggestions", task.SuggestedFiles)
+	}
+	if task.SuggestedFiles[0].Path != "calculator/calculator.go" || task.SuggestedFiles[0].Test {
+		t.Fatalf("SuggestedFiles[0] = %#v, want source file first", task.SuggestedFiles[0])
+	}
+	if task.SuggestedFiles[1].Path != "calculator/calculator_test.go" || !task.SuggestedFiles[1].Test {
+		t.Fatalf("SuggestedFiles[1] = %#v, want test file second", task.SuggestedFiles[1])
 	}
 	for _, banned := range task.BannedIdentifiers {
 		if strings.Contains(strings.ToLower(task.FeatureDescription), strings.ToLower(banned)) {
@@ -66,13 +76,112 @@ func TestPromptSummarizerFallsBackWhenIdentifierStrippingDestroysSummary(t *test
 	summary, err := (PromptSummarizer{}).Summarize(context.Background(), SummaryRequest{
 		CommitMessage:     "fix: update graph view renderer",
 		ReferenceDiff:     "+placeholder",
+		ChangedFiles:      []history.ChangedFile{{Path: "internal/dashboard/view.go"}, {Path: "internal/dashboard/view_test.go", Test: true}},
 		BannedIdentifiers: []string{"update", "graph", "view", "renderer"},
 	})
 	if err != nil {
 		t.Fatalf("Summarize() error = %v", err)
 	}
-	if summary != "Add the user-visible behavior covered by the original tests." {
+	if summary != "Recreate the internal dashboard behavior exercised by the changed tests." {
 		t.Fatalf("Summarize() = %q, want fallback", summary)
+	}
+}
+
+func TestPromptSummarizerUsesCommitMessageFilesAndTests(t *testing.T) {
+	summary, err := (PromptSummarizer{}).Summarize(context.Background(), SummaryRequest{
+		CommitMessage: "feat(auth): allow expired invitations to be refreshed",
+		ChangedFiles: []history.ChangedFile{
+			{Path: "internal/auth/invitations.go"},
+			{Path: "internal/auth/invitations_test.go", Test: true},
+		},
+		BannedIdentifiers: []string{"RefreshInvitation"},
+	})
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
+	want := "Recreate the requested internal auth behavior: allow expired invitations to be refreshed. Use the changed tests as the acceptance criteria."
+	if summary != want {
+		t.Fatalf("Summarize() = %q, want %q", summary, want)
+	}
+}
+
+func TestPromptSummarizerQualityForRealishMessagesAndPythonDiffs(t *testing.T) {
+	tests := []struct {
+		name       string
+		req        SummaryRequest
+		want       string
+		notContain []string
+	}{
+		{
+			name: "scoped fix subject keeps behavior and area",
+			req: SummaryRequest{
+				CommitMessage: "fix(auth): allow expired invitations to be refreshed",
+				ChangedFiles: []history.ChangedFile{
+					{Path: "internal/auth/invitations.go"},
+					{Path: "internal/auth/invitations_test.go", Test: true},
+				},
+				BannedIdentifiers: []string{"RefreshInvitation", "InvitationRefresher"},
+			},
+			want:       "Recreate the requested internal auth behavior: allow expired invitations to be refreshed. Use the changed tests as the acceptance criteria.",
+			notContain: []string{"RefreshInvitation", "InvitationRefresher", "fix(auth)"},
+		},
+		{
+			name: "python diff avoids implementation identifiers",
+			req: SummaryRequest{
+				CommitMessage: "feat(billing): retry failed invoice charges after provider timeouts",
+				ReferenceDiff: `diff --git a/billing/retries.py b/billing/retries.py
+--- a/billing/retries.py
++++ b/billing/retries.py
+@@ -1,2 +1,9 @@
++class StripeRetryPolicy:
++    def retry_failed_invoice_charge(invoice_id):
++        return calculate_retry_window(invoice_id)
+diff --git a/tests/test_retries.py b/tests/test_retries.py
+--- a/tests/test_retries.py
++++ b/tests/test_retries.py
+@@ -1,2 +1,6 @@
++def test_retry_failed_invoice_charge():
++    assert retry_failed_invoice_charge("inv_123")
+`,
+				ChangedFiles: []history.ChangedFile{
+					{Path: "billing/retries.py"},
+					{Path: "tests/test_retries.py", Test: true},
+				},
+				BannedIdentifiers: []string{"StripeRetryPolicy", "retry_failed_invoice_charge", "calculate_retry_window"},
+			},
+			want:       "Recreate the requested billing behavior: retry failed invoice charges after provider timeouts. Use the changed tests as the acceptance criteria.",
+			notContain: []string{"StripeRetryPolicy", "retry_failed_invoice_charge", "calculate_retry_window", "feat(billing)"},
+		},
+		{
+			name: "fallback remains specific when subject is mostly stripped",
+			req: SummaryRequest{
+				CommitMessage: "feat: WidgetRenderer GraphWidget",
+				ChangedFiles: []history.ChangedFile{
+					{Path: "web/widgets/graph.py"},
+					{Path: "tests/test_graph_widget.py", Test: true},
+				},
+				BannedIdentifiers: []string{"WidgetRenderer", "GraphWidget"},
+			},
+			want:       "Recreate the web widgets behavior exercised by the changed tests.",
+			notContain: []string{"WidgetRenderer", "GraphWidget"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			summary, err := (PromptSummarizer{}).Summarize(context.Background(), tt.req)
+			if err != nil {
+				t.Fatalf("Summarize() error = %v", err)
+			}
+			if summary != tt.want {
+				t.Fatalf("Summarize() = %q, want %q", summary, tt.want)
+			}
+			for _, banned := range tt.notContain {
+				if strings.Contains(strings.ToLower(summary), strings.ToLower(banned)) {
+					t.Fatalf("Summarize() = %q leaked %q", summary, banned)
+				}
+			}
+		})
 	}
 }
 
