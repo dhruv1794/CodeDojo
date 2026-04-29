@@ -41,7 +41,7 @@ func promptForConfig(cmd *cobra.Command, cfg config.Config) (config.Config, erro
 	in := bufio.NewReader(cmd.InOrStdin())
 	out := cmd.OutOrStdout()
 
-	backend, err := promptChoice(in, out, "LLM backend", cfg.Coach.Backend, []string{"mock", "anthropic"})
+	backend, err := promptChoice(in, out, "LLM backend", cfg.Coach.Backend, []string{"mock", "anthropic", "ollama"})
 	if err != nil {
 		return config.Config{}, err
 	}

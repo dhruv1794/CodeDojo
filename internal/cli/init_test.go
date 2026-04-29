@@ -59,7 +59,7 @@ func TestPromptForConfigAnthropic(t *testing.T) {
 
 func TestPromptForConfigRepromptsInvalidValues(t *testing.T) {
 	cmd := &cobra.Command{}
-	in := strings.NewReader("ollama\nmock\n8\n2\n")
+	in := strings.NewReader("bogus\nmock\n8\n2\n")
 	out := &bytes.Buffer{}
 	cmd.SetIn(in)
 	cmd.SetOut(out)
@@ -80,6 +80,29 @@ func TestPromptForConfigRepromptsInvalidValues(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "enter a number from 1 to 5") {
 		t.Fatalf("expected invalid difficulty warning in output:\n%s", out.String())
+	}
+}
+
+func TestPromptForConfigOllama(t *testing.T) {
+	cmd := &cobra.Command{}
+	in := strings.NewReader("ollama\n4\n")
+	out := &bytes.Buffer{}
+	cmd.SetIn(in)
+	cmd.SetOut(out)
+
+	cfg, err := promptForConfig(cmd, config.Default())
+	if err != nil {
+		t.Fatalf("promptForConfig returned error: %v", err)
+	}
+
+	if cfg.Coach.Backend != "ollama" {
+		t.Fatalf("backend = %q, want ollama", cfg.Coach.Backend)
+	}
+	if cfg.Coach.APIKey != "" {
+		t.Fatalf("api key = %q, want empty", cfg.Coach.APIKey)
+	}
+	if cfg.Defaults.Difficulty != 4 {
+		t.Fatalf("difficulty = %d, want 4", cfg.Defaults.Difficulty)
 	}
 }
 
