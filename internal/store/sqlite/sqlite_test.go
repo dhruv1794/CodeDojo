@@ -20,7 +20,7 @@ func TestOpenAppliesSchema(t *testing.T) {
 	ctx := context.Background()
 	store := openTestStore(t, ctx)
 
-	for _, table := range []string{"sessions", "events", "scores", "mutation_logs"} {
+	for _, table := range []string{"sessions", "events", "scores", "mutation_logs", "streaks"} {
 		t.Run(table, func(t *testing.T) {
 			var name string
 			err := store.db.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`, table).Scan(&name)
@@ -113,7 +113,6 @@ func TestStoreCRUDRoundTrip(t *testing.T) {
 		Repo:       "/tmp/repo",
 		Task:       "find the changed comparison",
 		HintBudget: 3,
-		HintsUsed:  1,
 		Score:      42,
 		State:      session.StateCreated,
 		StartedAt:  started,
@@ -155,11 +154,15 @@ func TestStoreCRUDRoundTrip(t *testing.T) {
 	if err := store.UpdateState(ctx, "sess-1", session.StateRunning); err != nil {
 		t.Fatalf("UpdateState() error = %v", err)
 	}
+	if err := store.IncrementHintsUsed(ctx, "sess-1"); err != nil {
+		t.Fatalf("IncrementHintsUsed() error = %v", err)
+	}
 	if err := store.UpsertScore(ctx, "sess-1", 125); err != nil {
 		t.Fatalf("UpsertScore() error = %v", err)
 	}
 
 	wantSession.State = session.StateRunning
+	wantSession.HintsUsed = 1
 	wantSession.Score = 125
 	gotSession, err = store.GetSession(ctx, "sess-1")
 	if err != nil {
@@ -183,6 +186,52 @@ func TestStoreCRUDRoundTrip(t *testing.T) {
 		t.Fatalf("ListSessions() length = %d, want 1", len(sessions))
 	}
 	assertSessionEqual(t, sessions[0], wantSession)
+}
+
+func TestStatsAndStreakRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+	started := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
+	for _, sess := range []session.Session{
+		{ID: "review-1", Mode: session.ModeReviewer, Repo: "/repos/api", Task: "review", Score: 100, State: session.StateClosed, StartedAt: started},
+		{ID: "review-2", Mode: session.ModeReviewer, Repo: "/repos/api", Task: "review", Score: 50, State: session.StateClosed, StartedAt: started.Add(time.Minute)},
+		{ID: "learn-1", Mode: session.ModeNewcomer, Repo: "/repos/web", Task: "learn", Score: 0, State: session.StateClosed, StartedAt: started.Add(2 * time.Minute)},
+	} {
+		if err := store.CreateSession(ctx, sess); err != nil {
+			t.Fatalf("CreateSession(%s) error = %v", sess.ID, err)
+		}
+	}
+	if err := store.SaveMutationLog(ctx, "review-1", mutate.MutationLog{
+		ID:         "mut-1",
+		RepoPath:   "/repos/api",
+		Difficulty: 2,
+		Mutation:   mutate.Mutation{Operator: "boundary", FilePath: "a.go", StartLine: 1, EndLine: 1},
+		CreatedAt:  started,
+	}); err != nil {
+		t.Fatalf("SaveMutationLog() error = %v", err)
+	}
+	if streak, err := store.RecordStreakResult(ctx, true); err != nil || streak.Current != 1 || streak.Best != 1 {
+		t.Fatalf("RecordStreakResult(true) = %+v, %v; want 1/1", streak, err)
+	}
+	if streak, err := store.RecordStreakResult(ctx, true); err != nil || streak.Current != 2 || streak.Best != 2 {
+		t.Fatalf("RecordStreakResult(true) = %+v, %v; want 2/2", streak, err)
+	}
+	if streak, err := store.RecordStreakResult(ctx, false); err != nil || streak.Current != 0 || streak.Best != 2 {
+		t.Fatalf("RecordStreakResult(false) = %+v, %v; want 0/2", streak, err)
+	}
+
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats() error = %v", err)
+	}
+	if stats.Total != 3 || stats.Graded != 2 || stats.Best != 100 || stats.Streak.Current != 0 || stats.Streak.Best != 2 {
+		t.Fatalf("Stats() = %+v, want totals 3/2 best 100 streak 0/2", stats)
+	}
+	if len(stats.ByOp) != 1 || stats.ByOp[0].Name != "boundary" || stats.ByOp[0].Count != 1 {
+		t.Fatalf("ByOp = %+v, want one boundary row", stats.ByOp)
+	}
 }
 
 func TestAppendEventConcurrent(t *testing.T) {

@@ -1,6 +1,6 @@
 BIN := bin/codedojo
 
-.PHONY: build test lint smoke e2e-reviewer e2e-newcomer e2e clean
+.PHONY: build test lint smoke e2e-reviewer e2e-newcomer e2e images clean
 
 build:
 	go build -ldflags "-X github.com/dhruvmishra/codedojo/internal/cli.version=dev -X github.com/dhruvmishra/codedojo/internal/cli.commit=$$(git rev-parse --short HEAD 2>/dev/null || echo none)" -o $(BIN) ./cmd/codedojo
@@ -21,6 +21,10 @@ e2e-newcomer:
 	go test ./internal/cli -run TestRunLearnScriptedReimplementation -count=1
 
 e2e: smoke e2e-reviewer e2e-newcomer
+
+images:
+	docker build -t codedojo/go:1.23 configs/images/go
+	docker build -t codedojo/python:3.12 configs/images/python
 
 clean:
 	rm -rf bin dist coverage.out

@@ -71,6 +71,18 @@ func (s *Store) ListEvents(ctx context.Context, sessionID string) ([]session.Eve
 	return append([]session.Event(nil), s.events[sessionID]...), nil
 }
 
+func (s *Store) IncrementHintsUsed(ctx context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok {
+		return fmt.Errorf("session %q not found", id)
+	}
+	sess.HintsUsed++
+	s.sessions[id] = sess
+	return nil
+}
+
 func (s *Store) UpdateState(ctx context.Context, id string, state session.State) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

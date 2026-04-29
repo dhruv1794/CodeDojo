@@ -9,8 +9,6 @@ import (
 	"github.com/dhruvmishra/codedojo/internal/coach"
 	"github.com/dhruvmishra/codedojo/internal/coach/mock"
 	"github.com/dhruvmishra/codedojo/internal/repo"
-	"github.com/dhruvmishra/codedojo/internal/sandbox"
-	"github.com/dhruvmishra/codedojo/internal/sandbox/local"
 	"github.com/dhruvmishra/codedojo/internal/session"
 	"github.com/dhruvmishra/codedojo/internal/store/sqlite"
 	"github.com/spf13/cobra"
@@ -51,10 +49,11 @@ func runSmoke(ctx context.Context, cmd *cobra.Command) error {
 	}
 	defer store.Close()
 
+	selected := selectSandbox(ctx, cmd.ErrOrStderr())
 	manager := session.Manager{
 		Coach:  coach.RetryWithStricterPrompt(mock.Coach{}, nil),
 		Store:  store,
-		Driver: local.Driver{},
+		Driver: selected.driver,
 	}
 	sess := session.Session{
 		ID:         fmt.Sprintf("smoke-%d", time.Now().UnixNano()),
@@ -63,7 +62,7 @@ func runSmoke(ctx context.Context, cmd *cobra.Command) error {
 		Task:       "smoke",
 		HintBudget: 3,
 	}
-	box, err := manager.New(ctx, sess, sandbox.Spec{RepoMount: loaded.Path, Network: sandbox.NetworkNone})
+	box, err := manager.New(ctx, sess, selected.spec(loaded.Path))
 	if err != nil {
 		return err
 	}

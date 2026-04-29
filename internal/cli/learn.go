@@ -12,7 +12,6 @@ import (
 	"github.com/dhruvmishra/codedojo/internal/modes/newcomer"
 	"github.com/dhruvmishra/codedojo/internal/repo"
 	"github.com/dhruvmishra/codedojo/internal/sandbox"
-	"github.com/dhruvmishra/codedojo/internal/sandbox/local"
 	"github.com/dhruvmishra/codedojo/internal/session"
 	"github.com/dhruvmishra/codedojo/internal/store/sqlite"
 	"github.com/spf13/cobra"
@@ -98,10 +97,11 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 	if err != nil {
 		return err
 	}
+	selected := selectSandbox(ctx, cmd.ErrOrStderr())
 	manager := session.Manager{
 		Coach:  hintCoach,
 		Store:  store,
-		Driver: local.Driver{},
+		Driver: selected.driver,
 	}
 	sess := session.Session{
 		ID:         sessionID,
@@ -111,11 +111,15 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 		HintBudget: opts.Budget,
 		StartedAt:  time.Now(),
 	}
-	box, err := manager.New(ctx, sess, sandbox.Spec{RepoMount: task.RepoPath, Network: sandbox.NetworkNone})
+	box, err := manager.New(ctx, sess, selected.spec(task.RepoPath))
 	if err != nil {
 		return err
 	}
 	defer box.Close()
+	streak, err := store.GetStreak(ctx)
+	if err != nil {
+		return err
+	}
 
 	state := &learnREPL{
 		cmd:        cmd,
@@ -127,9 +131,10 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 		sessionID:  sessionID,
 		startedAt:  sess.StartedAt,
 		hintLimit:  opts.Budget,
+		streak:     streak.Current,
 		gradeCoach: gradeCoach,
 	}
-	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Newcomer task ready. Difficulty %d.\nFeature: %s\nType help for commands.\n", opts.Difficulty, task.FeatureDescription); err != nil {
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Newcomer task ready. Difficulty %d. Streak %d.\nFeature: %s\nType help for commands.\n", opts.Difficulty, streak.Current, task.FeatureDescription); err != nil {
 		return err
 	}
 	return repl.Runner{
@@ -152,6 +157,7 @@ type learnREPL struct {
 	hintLimit  int
 	hintCosts  []int
 	hintsUsed  int
+	streak     int
 	done       bool
 	gradeCoach coach.Coach
 }
@@ -310,6 +316,7 @@ func (l *learnREPL) submit(ctx context.Context) error {
 		HintCosts:    l.hintCosts,
 		StartedAt:    l.startedAt,
 		SubmittedAt:  time.Now(),
+		Streak:       l.streak,
 	}, newcomer.GradeOptions{
 		Coach:   l.gradeCoach,
 		TestCmd: l.testCmd,
@@ -327,6 +334,10 @@ func (l *learnREPL) submit(ctx context.Context) error {
 	if err := l.store.AppendEvent(ctx, session.Event{SessionID: l.sessionID, Type: session.EventGrade, Payload: fmt.Sprintf("score=%d", result.Score)}); err != nil {
 		return err
 	}
+	streak, err := l.store.RecordStreakResult(ctx, result.Score > 0)
+	if err != nil {
+		return err
+	}
 	if err := l.manager.Close(ctx, l.sessionID, l.box); err != nil {
 		return err
 	}
@@ -338,7 +349,7 @@ func (l *learnREPL) submit(ctx context.Context) error {
 		result.ApproachScore,
 		result.TestQualityScore,
 		result.HintDeduction,
-		result.StreakBonus,
+		streak.Current,
 		result.ApproachFeedback,
 	); err != nil {
 		return err
