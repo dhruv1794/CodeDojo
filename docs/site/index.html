@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CodeDojo — Developer Training for the AI Era</title>
+  <meta name="description" content="An open-source training ground for developers. Hunt AI-injected bugs in real codebases. Reimplement real features from history. Keep your engineering edge sharp.">
+  <meta property="og:title" content="CodeDojo — Developer Training for the AI Era">
+  <meta property="og:description" content="Hunt AI-injected bugs. Reimplement real features. Train against code that actually matters.">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bungee+Tint&family=Reem+Kufi+Fun:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ── tokens ─────────────────────────────────────────── */
+    :root {
+      --bg:          #f5f0eb;
+      --ink:         #1a0d0a;
+      --muted:       #6b5a52;
+      --line:        #e2d0c8;
+      --panel:       #ffffff;
+      --accent:      #ca0900;
+      --accent-mid:  #e03010;
+      --accent-lt:   #fdeeed;
+      --warn:        #8c5010;
+      --warn-lt:     #fdf3e6;
+      --term-bg:     #180d0a;
+      --term-bar:    #221410;
+      --term-green:  #d4890a;
+      --term-teal:   #f37764;
+      --term-gray:   #886050;
+      --term-text:   #f0e8e0;
+
+      --f-serif:  'Bungee Tint', serif;
+      --f-ui:     'Reem Kufi Fun', ui-rounded, system-ui, sans-serif;
+      --f-mono:   'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+      --max-w:    1140px;
+      --pad:      clamp(20px, 5vw, 60px);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--f-ui);
+      font-size: 16px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── nav ─────────────────────────────────────────────── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(245,240,235,.92);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid transparent;
+      transition: border-color .2s;
+    }
+    nav.is-scrolled { border-bottom-color: var(--line); }
+
+    .nav-inner {
+      max-width: var(--max-w); margin: 0 auto;
+      padding: 0 var(--pad); height: 56px;
+      display: flex; align-items: center; gap: 28px;
+    }
+
+    .nav-logo {
+      font-family: var(--f-ui); font-weight: 800; font-size: 15px;
+      letter-spacing: -.02em; color: var(--ink); text-decoration: none;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .nav-logo .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent); display: inline-block;
+    }
+
+    .nav-links {
+      display: flex; gap: 22px; list-style: none; margin-left: auto;
+    }
+    .nav-links a {
+      font-size: 12px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted);
+      text-decoration: none; transition: color .15s;
+    }
+    .nav-links a:hover { color: var(--ink); }
+
+    .nav-gh {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 700; color: var(--ink);
+      text-decoration: none; border: 1.5px solid var(--ink);
+      border-radius: 6px; padding: 5px 13px; white-space: nowrap;
+      transition: background .15s, color .15s;
+    }
+    .nav-gh:hover { background: var(--ink); color: var(--bg); }
+    .nav-gh svg { width: 14px; height: 14px; fill: currentColor; flex-shrink: 0; }
+
+    /* ── hero ────────────────────────────────────────────── */
+    .hero {
+      max-width: var(--max-w); margin: 0 auto;
+      padding: clamp(56px,10vh,120px) var(--pad) clamp(56px,8vh,100px);
+      display: grid;
+      grid-template-columns: minmax(0,1fr) 480px;
+      gap: 40px 48px;
+      align-items: start;
+    }
+    @media (max-width: 1020px) { .hero { grid-template-columns: 1fr; } }
+
+    .hero-copy { grid-column: 1; min-width: 0; overflow: hidden; }
+
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 11px; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 22px;
+    }
+    .eyebrow::before {
+      content: ''; width: 20px; height: 2px;
+      background: var(--accent); border-radius: 1px;
+    }
+
+    h1 {
+      font-family: var(--f-serif);
+      font-size: clamp(28px, 3.4vw, 50px);
+      line-height: 1.1; letter-spacing: .01em;
+      margin-bottom: 24px;
+    }
+    h1 em { font-style: normal; color: var(--accent); }
+
+    .hero-sub {
+      font-size: clamp(15px, 1.8vw, 18px); color: var(--muted);
+      max-width: 56ch; line-height: 1.6; margin-bottom: 36px;
+    }
+
+    .hero-actions {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-family: var(--f-ui); font-size: 14px; font-weight: 700;
+      text-decoration: none; border-radius: 8px; padding: 10px 20px;
+      transition: all .15s; cursor: pointer; border: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover {
+      background: var(--accent-mid);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 18px rgba(202,9,0,.28);
+    }
+    .btn-secondary {
+      background: var(--panel); color: var(--ink);
+      border: 1.5px solid var(--line);
+    }
+    .btn-secondary:hover { border-color: var(--ink); transform: translateY(-1px); }
+
+    /* ── terminal block ──────────────────────────────────── */
+    .hero-terminal {
+      grid-column: 2; grid-row: 1;
+      background: var(--term-bg); border-radius: 10px; overflow: hidden;
+      box-shadow: 0 20px 60px rgba(23,23,23,.22), 0 4px 16px rgba(23,23,23,.1);
+    }
+    @media (max-width: 960px) { .hero-terminal { grid-column: 1; grid-row: 2; } }
+
+    .tbar {
+      background: var(--term-bar); padding: 10px 16px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .tdot {
+      width: 10px; height: 10px; border-radius: 50%;
+    }
+    .tdot.r { background: #ff5f57; }
+    .tdot.y { background: #febc2e; }
+    .tdot.g { background: #5cb85c; }
+    .tbar .tname {
+      font-family: var(--f-mono); font-size: 11px; color: #555; margin-left: auto;
+    }
+
+    .tbody {
+      padding: 20px 22px 26px;
+      font-family: var(--f-mono); font-size: 12.5px; line-height: 1.75;
+    }
+    .tl { display: block; }
+    .tc  { color: #4a4a48; }
+    .tp  { color: var(--term-green); user-select: none; }
+    .tk  { color: var(--term-text); }
+    .to  { color: var(--term-gray); padding-left: 16px; }
+    .ts  { color: var(--term-green); padding-left: 16px; }
+    .th  { color: var(--term-teal); }
+
+    .cursor {
+      display: inline-block; width: 6px; height: 13px;
+      background: var(--term-text); vertical-align: text-bottom;
+      animation: blink 1.1s step-end infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── shared section shell ────────────────────────────── */
+    .section {
+      max-width: var(--max-w); margin: 0 auto;
+      padding: clamp(60px,8vh,100px) var(--pad);
+    }
+
+    .slabel {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 14px;
+    }
+    .slabel::before {
+      content: ''; width: 16px; height: 2px;
+      background: var(--accent); border-radius: 1px;
+    }
+
+    h2 {
+      font-family: var(--f-serif);
+      font-size: clamp(30px, 4.5vw, 50px);
+      letter-spacing: -.02em; line-height: 1.1; margin-bottom: 14px;
+    }
+
+    .sintro {
+      font-size: 17px; color: var(--muted);
+      max-width: 58ch; line-height: 1.6; margin-bottom: 48px;
+    }
+
+    hr.div {
+      border: none; border-top: 1px solid var(--line);
+      margin: 0 var(--pad);
+    }
+
+    /* ── problem strip ───────────────────────────────────── */
+    .problem {
+      background: var(--ink);
+      padding: clamp(48px,7vh,80px) var(--pad);
+    }
+    .problem-inner {
+      max-width: var(--max-w); margin: 0 auto;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 48px; align-items: center;
+    }
+    @media (max-width: 760px) { .problem-inner { grid-template-columns: 1fr; } }
+
+    .problem h2 {
+      font-family: var(--f-serif); color: var(--bg);
+      font-size: clamp(26px,4vw,46px);
+    }
+    .problem h2 em { color: var(--term-teal); font-style: italic; }
+    .problem-body {
+      color: rgba(245,240,235,.6); font-size: 15.5px; line-height: 1.7;
+    }
+    .problem-body p + p { margin-top: 13px; }
+    .problem-body strong { color: var(--bg); font-weight: 600; }
+
+    /* ── mode cards ──────────────────────────────────────── */
+    .modes-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 22px;
+    }
+    @media (max-width: 720px) { .modes-grid { grid-template-columns: 1fr; } }
+
+    .mode-card {
+      background: var(--panel); border: 1.5px solid var(--line);
+      border-radius: 12px; padding: 30px 30px 24px;
+      position: relative; overflow: hidden;
+      transition: box-shadow .2s, transform .2s;
+    }
+    .mode-card:hover {
+      box-shadow: 0 10px 36px rgba(23,23,23,.09);
+      transform: translateY(-2px);
+    }
+    .mode-card::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+      width: 4px; border-radius: 12px 0 0 12px;
+    }
+    .mode-card.learn::before { background: var(--accent); }
+    .mode-card.review::before { background: var(--warn); }
+
+    .mbadge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 700; letter-spacing: .07em;
+      text-transform: uppercase; border-radius: 20px;
+      padding: 3px 10px; margin-bottom: 16px;
+      border: 1px solid;
+    }
+    .mode-card.learn .mbadge { color: var(--accent); border-color: var(--accent); }
+    .mode-card.review .mbadge { color: var(--warn); border-color: var(--warn); }
+
+    .mode-card h3 {
+      font-family: var(--f-serif); font-size: 26px;
+      letter-spacing: -.01em; margin-bottom: 10px;
+    }
+    .mode-card p {
+      color: var(--muted); font-size: 14.5px; line-height: 1.6; margin-bottom: 18px;
+    }
+
+    .mode-meta {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 11px;
+      padding-top: 18px; border-top: 1px solid var(--line);
+    }
+    .mmeta-label {
+      font-size: 10.5px; font-weight: 700; letter-spacing: .07em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 2px;
+    }
+    .mmeta-val { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+    /* ── scoring tables ──────────────────────────────────── */
+    .score-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 32px;
+    }
+    @media (max-width: 720px) { .score-grid { grid-template-columns: 1fr; } }
+
+    table.score {
+      width: 100%; border-collapse: collapse; font-size: 14px;
+    }
+    table.score caption {
+      text-align: left; font-weight: 700; font-size: 13px;
+      padding-bottom: 10px; color: var(--ink);
+    }
+    table.score th {
+      text-align: left; font-size: 10.5px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+      padding: 5px 0; border-bottom: 2px solid var(--line);
+    }
+    table.score td {
+      padding: 8px 0; border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    table.score td:last-child {
+      text-align: right; font-family: var(--f-mono); font-size: 12.5px;
+      font-weight: 500; color: var(--accent);
+    }
+    table.score tr:last-child td { border-bottom: none; }
+
+    /* ── architecture (dark) ─────────────────────────────── */
+    .arch-wrap { background: var(--ink); }
+    .arch-inner {
+      max-width: var(--max-w); margin: 0 auto;
+      padding: clamp(60px,8vh,100px) var(--pad);
+    }
+    .arch-inner .slabel { color: var(--term-teal); }
+    .arch-inner .slabel::before { background: var(--term-teal); }
+    .arch-inner h2 { color: var(--bg); }
+    .arch-inner .sintro { color: rgba(245,240,235,.55); }
+
+    /* ── arch flow (layered bands) ──────────────────────── */
+    .arch-flow {
+      display: flex; flex-direction: column; align-items: stretch; gap: 0;
+      margin-bottom: 32px;
+    }
+    .af-layer {
+      border: 1.5px solid rgba(243,119,100,.18); border-radius: 12px;
+      padding: 18px 22px 20px; background: rgba(26,8,4,.55);
+    }
+    .af-layer-tag {
+      font-family: var(--f-mono); font-size: 10px; font-weight: 700;
+      letter-spacing: .12em; text-transform: uppercase;
+      color: rgba(243,119,100,.42); margin-bottom: 14px; display: block;
+    }
+    .af-nodes {
+      display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
+    }
+    .af-node {
+      background: #200b08; border: 2.5px solid #f37764; border-radius: 8px;
+      padding: 12px 16px; box-shadow: 4px 4px 0 #0a0302;
+      display: flex; flex-direction: column; gap: 4px; min-width: 148px;
+    }
+    .af-node--wide { min-width: 228px; text-align: center; align-items: center; }
+    .af-pkg {
+      font-family: var(--f-mono); font-size: 12px; font-weight: 600; color: #f37764;
+    }
+    .af-role {
+      font-family: var(--f-mono); font-size: 10px; color: #7a4030;
+    }
+    .af-arrow {
+      text-align: center; font-size: 22px; line-height: 1;
+      padding: 7px 0; color: #f37764; opacity: .6;
+    }
+    .af-bidir {
+      display: flex; align-items: center; gap: 12px;
+      justify-content: center; flex-wrap: wrap;
+    }
+    .af-bidir-ch {
+      font-family: var(--f-mono); color: #f37764; font-size: 20px;
+      opacity: .6; flex-shrink: 0;
+    }
+
+    .arch-cards {
+      display: grid; grid-template-columns: repeat(auto-fit,minmax(200px,1fr));
+      gap: 14px; margin-top: 32px;
+    }
+    .arch-card {
+      background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09);
+      border-radius: 8px; padding: 16px 18px;
+    }
+    .arch-card h4 {
+      color: var(--term-teal); font-family: var(--f-mono);
+      font-size: 11.5px; font-weight: 500; letter-spacing: .04em;
+      margin-bottom: 6px;
+    }
+    .arch-card p {
+      color: rgba(245,240,235,.45); font-size: 13px; line-height: 1.55;
+    }
+
+    /* ── security ────────────────────────────────────────── */
+    .sec-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 22px;
+    }
+    @media (max-width: 720px) { .sec-grid { grid-template-columns: 1fr; } }
+
+    .sec-card {
+      border: 1.5px solid var(--line); border-radius: 12px;
+      padding: 26px 26px 22px; background: var(--panel);
+    }
+    .sec-card h3 {
+      font-family: var(--f-ui); font-size: 15.5px; font-weight: 700;
+      margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+    }
+    .sec-tag {
+      font-size: 11px; font-weight: 600; padding: 2px 8px;
+      border-radius: 10px; margin-left: 4px;
+    }
+    .sec-tag.good { background: var(--accent-lt); color: var(--accent); }
+    .sec-tag.warn { background: var(--warn-lt); color: var(--warn); }
+
+    .sec-card ul {
+      list-style: none; font-size: 13.5px; color: var(--muted); line-height: 1.6;
+    }
+    .sec-card ul li {
+      padding: 5px 0; border-bottom: 1px solid var(--line);
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    .sec-card ul li:last-child { border-bottom: none; }
+    .sec-card ul li::before {
+      content: '·'; font-size: 16px; flex-shrink: 0; margin-top: -1px;
+    }
+    .sec-card.good ul li::before { color: var(--accent); }
+    .sec-card.badcard ul li::before { color: var(--warn); }
+    .sec-note {
+      font-size: 12.5px; color: var(--muted); margin-top: 12px;
+      padding-top: 12px; border-top: 1px solid var(--line);
+    }
+
+    /* ── quickstart ──────────────────────────────────────── */
+    .qs-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 22px;
+    }
+    @media (max-width: 720px) { .qs-grid { grid-template-columns: 1fr; } }
+
+    .qs-block {
+      background: var(--panel); border: 1.5px solid var(--line);
+      border-radius: 12px; overflow: hidden;
+    }
+    .qs-head {
+      padding: 13px 18px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .qs-title { font-size: 13px; font-weight: 700; }
+    .qs-tag {
+      font-size: 10.5px; font-weight: 700; padding: 2px 8px;
+      border-radius: 10px; letter-spacing: .05em;
+    }
+    .qs-tag.go { background: var(--accent-lt); color: var(--accent); }
+    .qs-tag.web { background: #f5f0ee; color: #8a3a6a; }
+
+    pre.cb {
+      padding: 16px 18px; font-family: var(--f-mono); font-size: 12px;
+      line-height: 1.72; overflow-x: auto; margin: 0; background: #fafaf8;
+    }
+    .cc { color: var(--muted); }
+    .ck { color: var(--accent); font-weight: 500; }
+
+    /* ── roadmap ─────────────────────────────────────────── */
+    .rm-grid {
+      display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr));
+      gap: 14px;
+    }
+    .rm-item {
+      background: var(--panel); border: 1.5px solid var(--line);
+      border-radius: 10px; padding: 16px 18px;
+      transition: border-color .15s;
+    }
+    .rm-item:hover { border-color: var(--accent); }
+    .rm-phase {
+      font-size: 10px; font-weight: 700; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--accent); margin-bottom: 5px;
+    }
+    .rm-name { font-size: 14.5px; font-weight: 700; color: var(--ink); }
+    .rm-status {
+      font-size: 12px; color: var(--muted); margin-top: 4px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .rdot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    }
+    .rdot.done { background: var(--accent); }
+    .rdot.active { background: #febc2e; }
+    .rdot.planned { background: var(--line); }
+
+    .rm-link {
+      margin-top: 24px; font-size: 14px; color: var(--muted);
+    }
+    .rm-link a {
+      color: var(--accent); text-decoration: none; font-weight: 600;
+    }
+    .rm-link a:hover { text-decoration: underline; }
+
+    /* ── CTA ─────────────────────────────────────────────── */
+    .cta-wrap { background: #f06090; }
+    .cta-inner {
+      max-width: var(--max-w); margin: 0 auto;
+      padding: clamp(56px,8vh,96px) var(--pad);
+      display: grid; grid-template-columns: 1fr auto;
+      gap: 32px; align-items: center;
+    }
+    @media (max-width: 640px) { .cta-inner { grid-template-columns: 1fr; } }
+
+    .cta-hed {
+      font-family: var(--f-serif); color: var(--ink);
+      font-size: clamp(26px,4vw,44px); letter-spacing: .01em; line-height: 1.1;
+    }
+    .cta-sub { margin-top: 10px; color: rgba(26,13,10,.62); font-size: 15.5px; }
+
+    .btn-white {
+      background: var(--ink); color: #fff; font-weight: 700;
+      border-radius: 8px; padding: 12px 22px; text-decoration: none;
+      font-family: var(--f-ui); font-size: 14px;
+      display: inline-flex; align-items: center; gap: 7px;
+      white-space: nowrap; transition: transform .15s, box-shadow .15s;
+    }
+    .btn-white:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(26,13,10,.3);
+    }
+    .btn-white svg { fill: currentColor; }
+
+    /* ── footer ──────────────────────────────────────────── */
+    footer {
+      background: #140806; color: rgba(245,240,235,.38);
+      padding: 28px var(--pad);
+    }
+    .foot-inner {
+      max-width: var(--max-w); margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 10px;
+      font-size: 12.5px; font-family: var(--f-mono);
+    }
+    footer a { color: rgba(245,240,235,.5); text-decoration: none; transition: color .15s; }
+    footer a:hover { color: rgba(245,240,235,.88); }
+    .foot-links { display: flex; gap: 18px; }
+
+    /* ── scroll animations ───────────────────────────────── */
+    .fade-in {
+      opacity: 0; transform: translateY(22px);
+      transition: opacity .55s ease, transform .55s ease;
+    }
+    .fade-in.visible { opacity: 1; transform: none; }
+
+    /* ── responsive ──────────────────────────────────────── */
+    @media (max-width: 540px) {
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══ NAV ═══ -->
+<nav id="nav">
+  <div class="nav-inner">
+    <a href="#" class="nav-logo"><span class="dot"></span>CodeDojo</a>
+    <ul class="nav-links">
+      <li><a href="#modes">Modes</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#security">Security</a></li>
+      <li><a href="#quickstart">Quickstart</a></li>
+      <li><a href="#roadmap">Roadmap</a></li>
+    </ul>
+    <a href="https://github.com/dhruvmishra/codedojo" class="nav-gh" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.749 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+      GitHub
+    </a>
+  </div>
+</nav>
+
+<!-- ═══ HERO ═══ -->
+<div class="hero">
+  <div class="hero-copy">
+    <div class="eyebrow">Open source &middot; Developer training</div>
+    <h1>Keep your <em>engineering edge</em> sharp.</h1>
+    <p class="hero-sub">
+      CodeDojo is a deliberate-practice tool for developers in the AI era. Hunt injected bugs in real codebases. Reimplement real features from history. Train against code that actually matters.
+    </p>
+    <div class="hero-actions">
+      <a href="#quickstart" class="btn btn-primary">Get started &rarr;</a>
+      <a href="https://github.com/dhruvmishra/codedojo" class="btn btn-secondary" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+  <div class="hero-terminal">
+    <div class="tbar">
+      <span class="tdot r"></span>
+      <span class="tdot y"></span>
+      <span class="tdot g"></span>
+      <span class="tname">zsh &mdash; codedojo</span>
+    </div>
+    <div class="tbody">
+      <span class="tl"><span class="tc"># build from source</span></span>
+      <span class="tl"><span class="tp">$ </span><span class="tk">git clone https://github.com/dhruvmishra/codedojo</span></span>
+      <span class="tl"><span class="tp">$ </span><span class="tk">cd CodeDojo &amp;&amp; make build</span></span>
+      <span class="tl">&nbsp;</span>
+      <span class="tl"><span class="tc"># start a reviewer session</span></span>
+      <span class="tl"><span class="tp">$ </span><span class="tk">./bin/codedojo review \</span></span>
+      <span class="tl"><span class="tk">&nbsp; &nbsp; --repo testdata/sample-go-repo --difficulty 2</span></span>
+      <span class="tl"><span class="ts">&#10003; Cloned repo</span></span>
+      <span class="tl"><span class="ts">&#10003; Sandbox ready</span></span>
+      <span class="tl"><span class="ts">&#10003; Mutation injected: somewhere in this codebase</span></span>
+      <span class="tl"><span class="to">Tests passing: 3/5 &middot; Hints remaining: 3</span></span>
+      <span class="tl">&nbsp;</span>
+      <span class="tl"><span class="tp">&rsaquo; </span><span class="th">hint nudge</span><span class="cursor"></span></span>
+    </div>
+  </div>
+</div>
+
+<hr class="div">
+
+<!-- ═══ PROBLEM ═══ -->
+<div class="problem">
+  <div class="problem-inner">
+    <div>
+      <h2>AI collapsed the struggle that <em>builds</em> real expertise.</h2>
+    </div>
+    <div class="problem-body">
+      <p><strong>New developers</strong> reach feature-shipping competence without earning the mental model of the codebase. When AI is wrong, they have nothing to fall back on.</p>
+      <p><strong>Experienced developers</strong> spend their day reviewing AI output. Pattern-matching skills atrophy because they're skimming generated diffs instead of authoring carefully.</p>
+      <p>CodeDojo is deliberate practice that reverses both. Active recall for newcomers. Adversarial sharpening for experts.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODES ═══ -->
+<section id="modes" class="section fade-in">
+  <div class="slabel">Practice</div>
+  <h2>Two modes, one engine.</h2>
+  <p class="sintro">Both modes run against real code — your code — with a Socratic AI coach that refuses to give answers.</p>
+  <div class="modes-grid">
+    <div class="mode-card learn">
+      <div class="mbadge">Learn mode</div>
+      <h3>Newcomer</h3>
+      <p>CodeDojo reverts a real feature commit from your repo's history. You get a stripped feature description with implementation details removed. Your job: reimplement it until the original tests pass.</p>
+      <p>The coach offers Socratic hints — reflective questions, file pointers, conceptual nudges — but never the answer. Every hint costs score.</p>
+      <div class="mode-meta">
+        <div>
+          <div class="mmeta-label">Who it's for</div>
+          <div class="mmeta-val">Devs new to a codebase</div>
+        </div>
+        <div>
+          <div class="mmeta-label">Ground truth</div>
+          <div class="mmeta-val">Original commit + tests</div>
+        </div>
+        <div>
+          <div class="mmeta-label">Session length</div>
+          <div class="mmeta-val">30 – 90 min</div>
+        </div>
+        <div>
+          <div class="mmeta-label">Win condition</div>
+          <div class="mmeta-val">Tests pass + sound approach</div>
+        </div>
+      </div>
+    </div>
+    <div class="mode-card review">
+      <div class="mbadge">Review mode</div>
+      <h3>Reviewer</h3>
+      <p>CodeDojo injects one plausible AST-level mutation into a Go file — a flipped boundary, a dropped error check, a negated conditional. Tests may or may not catch it. That's part of the lesson.</p>
+      <p>You inspect the code, run tests, narrow it down, and submit the file, line range, and diagnosis. Partial credit for proximity.</p>
+      <div class="mode-meta">
+        <div>
+          <div class="mmeta-label">Who it's for</div>
+          <div class="mmeta-val">Devs familiar with the codebase</div>
+        </div>
+        <div>
+          <div class="mmeta-label">Ground truth</div>
+          <div class="mmeta-val">Mutation engine log</div>
+        </div>
+        <div>
+          <div class="mmeta-label">Session length</div>
+          <div class="mmeta-val">5 – 20 min</div>
+        </div>
+        <div>
+          <div class="mmeta-label">Win condition</div>
+          <div class="mmeta-val">Localized + diagnosed</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ═══ SCORING ═══ -->
+<section class="section fade-in">
+  <div class="slabel">Scoring</div>
+  <h2>Deterministic grading by default.</h2>
+  <p class="sintro">Test results and mutation logs are computed facts. LLM grading only layers on top for nuance — approach quality and diagnosis depth.</p>
+  <div class="score-grid">
+    <table class="score">
+      <caption>Reviewer score</caption>
+      <thead><tr><th>Component</th><th>Points</th></tr></thead>
+      <tbody>
+        <tr><td>Correct file identified</td><td>+50</td></tr>
+        <tr><td>Line within &plusmn;2</td><td>+30</td></tr>
+        <tr><td>Correct operator class</td><td>+20</td></tr>
+        <tr><td>Diagnosis quality (coach)</td><td>0 – 50</td></tr>
+        <tr><td>Time bonus (fast solve)</td><td>+25</td></tr>
+        <tr><td>Streak multiplier</td><td>&times;N</td></tr>
+        <tr><td>Hint deductions</td><td>&minus;10 to &minus;30</td></tr>
+      </tbody>
+    </table>
+    <table class="score">
+      <caption>Newcomer score</caption>
+      <thead><tr><th>Component</th><th>Points</th></tr></thead>
+      <tbody>
+        <tr><td>Correctness (original tests pass)</td><td>+100</td></tr>
+        <tr><td>Approach quality (coach)</td><td>0 – 50</td></tr>
+        <tr><td>New tests beyond originals</td><td>0 – 30</td></tr>
+        <tr><td>Soft time cap (under 1 hr)</td><td>no penalty</td></tr>
+        <tr><td>Streak multiplier</td><td>&times;N</td></tr>
+        <tr><td>Hint deductions</td><td>&minus;10 to &minus;30</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═══ ARCHITECTURE (dark) ═══ -->
+<div class="arch-wrap" id="architecture">
+  <div class="arch-inner fade-in">
+    <div class="slabel">Internals</div>
+    <h2>Architecture.</h2>
+    <p class="sintro">Two thin mode layers on a shared spine of five interfaces. Reviewer and newcomer share infra but keep domain logic separate.</p>
+    <div class="arch-flow">
+      <div class="af-layer">
+        <span class="af-layer-tag">01 — entry</span>
+        <div class="af-nodes">
+          <div class="af-node af-node--wide">
+            <span class="af-pkg">cmd/codedojo</span>
+            <span class="af-role">CLI entrypoint (cobra)</span>
+          </div>
+        </div>
+      </div>
+      <div class="af-arrow">↓</div>
+      <div class="af-layer">
+        <span class="af-layer-tag">02 — cli</span>
+        <div class="af-nodes">
+          <div class="af-node af-node--wide">
+            <span class="af-pkg">internal/cli</span>
+            <span class="af-role">cobra commands + REPLs</span>
+          </div>
+        </div>
+      </div>
+      <div class="af-arrow">↓</div>
+      <div class="af-layer">
+        <span class="af-layer-tag">03 — infrastructure</span>
+        <div class="af-nodes">
+          <div class="af-node">
+            <span class="af-pkg">internal/repo</span>
+            <span class="af-role">clone / open / detect</span>
+          </div>
+          <div class="af-node">
+            <span class="af-pkg">internal/store</span>
+            <span class="af-role">sqlite / memory</span>
+          </div>
+          <div class="af-node">
+            <span class="af-pkg">internal/sandbox</span>
+            <span class="af-role">local / docker driver</span>
+          </div>
+          <div class="af-node">
+            <span class="af-pkg">internal/session</span>
+            <span class="af-role">state / scoring</span>
+          </div>
+        </div>
+      </div>
+      <div class="af-arrow">↓</div>
+      <div class="af-layer">
+        <span class="af-layer-tag">04 — domain</span>
+        <div class="af-bidir">
+          <div class="af-node">
+            <span class="af-pkg">internal/modes</span>
+            <span class="af-role">reviewer + newcomer</span>
+          </div>
+          <div class="af-bidir-ch">↔</div>
+          <div class="af-node">
+            <span class="af-pkg">internal/coach</span>
+            <span class="af-role">mock / anthropic / ollama</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="arch-cards">
+      <div class="arch-card">
+        <h4>sandbox.Driver</h4>
+        <p>Starts isolated sessions. Exec, WriteFile, ReadFile, Diff. Docker preferred; local fallback.</p>
+      </div>
+      <div class="arch-card">
+        <h4>coach.Coach</h4>
+        <p>Hint() and Grade(). Output-validator wrapped. Retries with stricter prompt on code leaks.</p>
+      </div>
+      <div class="arch-card">
+        <h4>session.Manager</h4>
+        <p>State machine: Created &rarr; Running &rarr; Submitted &rarr; Graded &rarr; Closed. Hint budget + streaks.</p>
+      </div>
+      <div class="arch-card">
+        <h4>store.Store</h4>
+        <p>SQLite persistence for sessions, events, scores, mutation logs, history cache.</p>
+      </div>
+      <div class="arch-card">
+        <h4>repo.Repo</h4>
+        <p>go-git wrapper. Clone, OpenLocal, DetectLanguage. Never mutates the original path.</p>
+      </div>
+      <div class="arch-card">
+        <h4>mutate.Engine</h4>
+        <p>AST-level Go mutations. Boundary, conditional, error-drop, slice-bounds operators.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SECURITY ═══ -->
+<section id="security" class="section fade-in">
+  <div class="slabel">Security</div>
+  <h2>Sandbox model.</h2>
+  <p class="sintro">CodeDojo runs build and test commands from repositories that may be unfamiliar or intentionally broken. Two driver modes share one interface.</p>
+  <div class="sec-grid">
+    <div class="sec-card good">
+      <h3>
+        Docker driver
+        <span class="sec-tag good">recommended</span>
+      </h3>
+      <ul>
+        <li>Container root filesystem read-only</li>
+        <li><code>--network=none</code> by default</li>
+        <li>Only <code>/workspace</code> mounted read-write</li>
+        <li>CPU, memory, and PID limits enforced</li>
+        <li>All Linux capabilities dropped</li>
+        <li><code>no-new-privileges</code> set</li>
+        <li>Container and tmpdir removed on close</li>
+      </ul>
+      <p class="sec-note">Falls back to local with a warning when Docker is unreachable. Use Docker for any unfamiliar repository.</p>
+    </div>
+    <div class="sec-card badcard">
+      <h3>
+        Local driver
+        <span class="sec-tag warn">dev only</span>
+      </h3>
+      <ul>
+        <li>Copies repo into a tmpdir</li>
+        <li>Runs commands on the host directly</li>
+        <li>No network isolation</li>
+        <li>No CPU or memory limits</li>
+        <li>Commands inherit host environment</li>
+        <li>Not a security boundary</li>
+      </ul>
+      <p class="sec-note">For development, tests, and trusted repos only. Switch to Docker before running unfamiliar code.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ═══ QUICKSTART ═══ -->
+<section id="quickstart" class="section fade-in">
+  <div class="slabel">Get started</div>
+  <h2>Quickstart.</h2>
+  <p class="sintro">Prerequisites: Go&nbsp;1.23+, Git. Docker is optional but recommended for sandboxing.</p>
+  <div class="qs-grid">
+    <div class="qs-block">
+      <div class="qs-head">
+        <span class="qs-title">Build &amp; configure</span>
+      </div>
+<pre class="cb"><span class="cc"># clone and build</span>
+git clone https://github.com/dhruvmishra/codedojo
+cd CodeDojo
+make build
+
+<span class="cc"># first-run wizard: pick LLM backend, API key,</span>
+<span class="cc"># and default difficulty</span>
+./bin/codedojo init
+
+<span class="cc"># optional: build Docker sandbox images</span>
+make images</pre>
+    </div>
+    <div class="qs-block">
+      <div class="qs-head">
+        <span class="qs-title">Reviewer mode</span>
+        <span class="qs-tag go">Go</span>
+      </div>
+<pre class="cb">./bin/codedojo review \
+  --repo testdata/sample-go-repo \
+  --difficulty 2 --budget 3
+
+<span class="cc"># inside the REPL</span>
+tests                    <span class="cc"># run tests</span>
+cat calculator.go        <span class="cc"># inspect file</span>
+hint nudge               <span class="cc"># ask coach</span>
+submit calc.go:13 \
+  "boundary comparison"  <span class="cc"># submit</span></pre>
+    </div>
+    <div class="qs-block">
+      <div class="qs-head">
+        <span class="qs-title">Newcomer mode</span>
+        <span class="qs-tag go">Go</span>
+      </div>
+<pre class="cb">./bin/codedojo learn \
+  --repo testdata/sample-go-repo \
+  --difficulty 2 --budget 3
+
+<span class="cc"># inside the REPL</span>
+tests                    <span class="cc"># see failures</span>
+cat calculator.go        <span class="cc"># inspect code</span>
+write calculator.go      <span class="cc"># edit file</span>
+diff                     <span class="cc"># review changes</span>
+submit                   <span class="cc"># grade it</span></pre>
+    </div>
+    <div class="qs-block">
+      <div class="qs-head">
+        <span class="qs-title">Local web UI</span>
+        <span class="qs-tag web">Browser</span>
+      </div>
+<pre class="cb"><span class="cc"># serve the local web app</span>
+./bin/codedojo serve \
+  --repo testdata/sample-go-repo \
+  --port 8080
+
+<span class="cc"># opens at http://localhost:8080</span>
+<span class="cc"># complete sessions in the browser;</span>
+<span class="cc"># no account or cloud service</span>
+
+./bin/codedojo status   <span class="cc"># past sessions</span>
+./bin/codedojo stats    <span class="cc"># aggregate stats</span></pre>
+    </div>
+  </div>
+</section>
+
+<hr class="div">
+
+<!-- ═══ ROADMAP ═══ -->
+<section id="roadmap" class="section fade-in">
+  <div class="slabel">Roadmap</div>
+  <h2>What&rsquo;s been built. What&rsquo;s next.</h2>
+  <p class="sintro">The full implementation plan lives in the repository. Here&rsquo;s where things stand.</p>
+  <div class="rm-grid">
+    <div class="rm-item">
+      <div class="rm-phase">M1</div>
+      <div class="rm-name">CLI Spine</div>
+      <div class="rm-status"><span class="rdot done"></span>Complete</div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-phase">M2</div>
+      <div class="rm-name">Reviewer Mode</div>
+      <div class="rm-status"><span class="rdot done"></span>Complete</div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-phase">M3</div>
+      <div class="rm-name">Newcomer Mode</div>
+      <div class="rm-status"><span class="rdot done"></span>Complete</div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-phase">M4</div>
+      <div class="rm-name">Polish &amp; Launch</div>
+      <div class="rm-status"><span class="rdot done"></span>Complete</div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-phase">M5</div>
+      <div class="rm-name">Local Web UI</div>
+      <div class="rm-status"><span class="rdot done"></span>Complete</div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-phase">M6</div>
+      <div class="rm-name">GitHub Pages</div>
+      <div class="rm-status"><span class="rdot active"></span>In progress</div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-phase">Next</div>
+      <div class="rm-name">Multi-language</div>
+      <div class="rm-status"><span class="rdot planned"></span>Planned</div>
+    </div>
+    <div class="rm-item">
+      <div class="rm-phase">Next</div>
+      <div class="rm-name">Python &amp; JS Review</div>
+      <div class="rm-status"><span class="rdot planned"></span>Planned</div>
+    </div>
+  </div>
+  <p class="rm-link">Full detail in <a href="https://github.com/dhruvmishra/codedojo/blob/main/docs/IMPLEMENTATION_PLAN.md" target="_blank" rel="noopener">IMPLEMENTATION_PLAN.md &rarr;</a></p>
+</section>
+
+<!-- ═══ CTA ═══ -->
+<div class="cta-wrap">
+  <div class="cta-inner">
+    <div>
+      <h2 class="cta-hed">Open source. Run it against your own codebase.</h2>
+      <p class="cta-sub">MIT licensed. No account. No hosted service. Your code stays local.</p>
+    </div>
+    <a href="https://github.com/dhruvmishra/codedojo" class="btn-white" target="_blank" rel="noopener">
+      <svg width="15" height="15" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.749 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+      View on GitHub
+    </a>
+  </div>
+</div>
+
+<!-- ═══ FOOTER ═══ -->
+<footer>
+  <div class="foot-inner">
+    <span>CodeDojo &middot; MIT License &middot; <a href="https://github.com/dhruvmishra/codedojo" target="_blank" rel="noopener">github.com/dhruvmishra/codedojo</a></span>
+    <div class="foot-links">
+      <a href="https://github.com/dhruvmishra/codedojo/blob/main/docs/architecture.md" target="_blank" rel="noopener">Architecture</a>
+      <a href="https://github.com/dhruvmishra/codedojo/blob/main/docs/security.md" target="_blank" rel="noopener">Security</a>
+      <a href="https://github.com/dhruvmishra/codedojo/blob/main/docs/contributing.md" target="_blank" rel="noopener">Contributing</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // sticky nav shadow
+  const nav = document.getElementById('nav');
+  window.addEventListener('scroll', () => {
+    nav.classList.toggle('is-scrolled', window.scrollY > 8);
+  }, { passive: true });
+
+  // scroll-triggered fade-ins
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.fade-in').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
