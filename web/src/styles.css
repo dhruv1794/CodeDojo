@@ -443,6 +443,7 @@ textarea {
   text-align: left;
   background: #fff;
   border-color: var(--line);
+  overflow: hidden;
 }
 
 .suggested-file strong {
@@ -457,6 +458,8 @@ textarea {
 }
 
 .file-list {
+  display: grid;
+  gap: 3px;
   max-height: calc(100vh - 180px);
   overflow: auto;
   padding: 8px;
@@ -476,9 +479,13 @@ textarea {
   background: transparent;
   padding: 6px 8px;
   border-radius: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.file:hover {
+.file:hover,
+.file.active {
   background: #f0eee8;
 }
 
@@ -499,11 +506,13 @@ textarea {
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr);
   min-height: 560px;
+  max-width: 100%;
   overflow: hidden;
 }
 
 .line-numbers {
-  overflow: hidden;
+  width: 52px;
+  overflow: auto;
   border-right: 1px solid var(--line);
   background: #f3f1eb;
   color: var(--muted);
@@ -515,6 +524,7 @@ textarea {
   user-select: none;
 }
 
+.line-numbers button,
 .line-number {
   display: block;
   width: 100%;
@@ -527,6 +537,18 @@ textarea {
   font: inherit;
   line-height: inherit;
   text-align: right;
+}
+
+.line-numbers button:hover,
+.line-numbers button.selected-line {
+  background: #ded9cc;
+  color: var(--ink);
+}
+
+.editor-body > div:not(.line-numbers) {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .line-number.highlight {

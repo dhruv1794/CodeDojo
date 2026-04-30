@@ -11,24 +11,26 @@ import (
 type Task struct {
 	RepoPath     string
 	Difficulty   int
+	Language     string
 	MutationLog  mutate.MutationLog
 	Instructions string
 }
 
+// TaskGenerator drives mutation task creation for a specific language.
+// Set Engine to a MutationEngine implementation (mutate.Engine for Go,
+// TextEngine for Python/JS/TS/Rust). When nil, defaults to a Go engine.
 type TaskGenerator struct {
-	Engine mutate.Engine
+	Engine MutationEngine
 }
 
 func GenerateTask(ctx context.Context, r repo.Repo, difficulty int) (Task, error) {
-	return TaskGenerator{
-		Engine: mutate.Engine{Mutators: op.All()},
-	}.GenerateTask(ctx, r, difficulty)
+	return TaskGenerator{}.GenerateTask(ctx, r, difficulty)
 }
 
 func (g TaskGenerator) GenerateTask(ctx context.Context, r repo.Repo, difficulty int) (Task, error) {
 	engine := g.Engine
-	if len(engine.Mutators) == 0 {
-		engine.Mutators = op.All()
+	if engine == nil {
+		engine = mutate.Engine{Mutators: op.All()}
 	}
 	log, err := engine.SelectAndApply(ctx, r, difficulty)
 	if err != nil {
@@ -37,6 +39,7 @@ func (g TaskGenerator) GenerateTask(ctx context.Context, r repo.Repo, difficulty
 	return Task{
 		RepoPath:     r.Path,
 		Difficulty:   difficulty,
+		Language:     engine.Language(),
 		MutationLog:  log,
 		Instructions: "Find the injected reviewer bug, then submit a file, line range, operator class, and diagnosis.",
 	}, nil

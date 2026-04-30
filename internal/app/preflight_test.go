@@ -49,22 +49,22 @@ func TestServicePreflightResponsesAcrossProjectTypes(t *testing.T) {
 		{
 			name:     "python",
 			files:    map[string]string{"pyproject.toml": "[project]\nname = \"demo\"\n"},
-			wantLang: "python", wantTest: "python -m pytest", wantReview: "Go AST mutations",
+			wantLang: "python", wantTest: "python -m pytest", wantReview: "mutation sites",
 		},
 		{
 			name:     "javascript",
 			files:    map[string]string{"package.json": "{\"scripts\":{\"test\":\"node test.js\"}}\n"},
-			wantLang: "javascript", wantTest: "npm test", wantReview: "Go AST mutations",
+			wantLang: "javascript", wantTest: "npm test", wantReview: "mutation sites",
 		},
 		{
 			name:     "typescript",
 			files:    map[string]string{"package.json": "{\"devDependencies\":{\"typescript\":\"latest\"}}\n", "tsconfig.json": "{}\n"},
-			wantLang: "typescript", wantTest: "npm test", wantReview: "Go AST mutations",
+			wantLang: "typescript", wantTest: "npm test", wantReview: "mutation sites",
 		},
 		{
 			name:     "rust",
 			files:    map[string]string{"Cargo.toml": "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n"},
-			wantLang: "rust", wantTest: "cargo test", wantReview: "Go AST mutations",
+			wantLang: "rust", wantTest: "cargo test", wantReview: "mutation sites",
 		},
 		{
 			name:     "unknown",
@@ -74,7 +74,7 @@ func TestServicePreflightResponsesAcrossProjectTypes(t *testing.T) {
 		{
 			name:     "override",
 			files:    map[string]string{".codedojo.yaml": "language: rust\ntest_cmd: cargo test --all\nbuild_cmd:\n  - cargo\n  - build\n"},
-			wantLang: "rust", wantTest: "cargo test --all", wantReview: "Go AST mutations",
+			wantLang: "rust", wantTest: "cargo test --all", wantReview: "mutation sites",
 		},
 	}
 	for _, tt := range tests {

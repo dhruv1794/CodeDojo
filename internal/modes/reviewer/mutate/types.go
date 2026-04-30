@@ -5,11 +5,23 @@ import (
 	"time"
 )
 
+// Mutator is the Go AST-based mutation interface. Language-specific
+// text-based mutators use the TextMutator interface in the textop package.
 type Mutator interface {
 	Name() string
 	Difficulty() int
 	Candidates(*ast.File) []Site
 	Apply(*ast.File, Site) (Mutation, error)
+}
+
+// ScanConfig controls which files are considered as mutation candidates.
+type ScanConfig struct {
+	// GlobPattern is the pattern passed to "git log -- <pattern>" (e.g. "*.go", "*.py").
+	// Defaults to "*.go".
+	GlobPattern string
+	// IsEligible reports whether a repo-relative file path should be considered.
+	// When nil, defaults to the Go-specific eligibility check.
+	IsEligible func(repoPath, relPath string) (bool, error)
 }
 
 type Site struct {

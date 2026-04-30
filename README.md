@@ -14,9 +14,9 @@ The MVP is a CLI-first tool. It uses deterministic grading wherever possible, va
 This repository is in active MVP development. The current build includes:
 
 - Cobra CLI for `init`, `review`, `learn`, `status`, `stats`, and `version`
-- Reviewer and newcomer end-to-end flows for Go repositories
-- AST mutation operators for reviewer mode
-- Commit ranking, revert, restore, and grading for newcomer mode
+- Reviewer and newcomer end-to-end flows for Go, Python, JavaScript, TypeScript, and Rust repositories
+- AST and text mutation operators for reviewer mode
+- Language-aware commit ranking, revert, restore, and grading for newcomer mode
 - Mock, Anthropic, and Ollama coach backends
 - Docker and local sandbox drivers
 - SQLite persistence for sessions, scores, streaks, mutation logs, and stats
@@ -28,6 +28,9 @@ Prerequisites:
 - Go 1.23+
 - Git
 - Docker, optional but recommended for stronger sandboxing
+- Python 3.12+ with `pytest`, for Python repositories
+- Node.js 20+ for JavaScript repositories; Node.js 22+ for TypeScript fixtures that use native type stripping
+- Rust 1.76+ with Cargo, for Rust repositories
 - `ANTHROPIC_API_KEY`, optional when using the Anthropic coach backend
 - Ollama, optional when using the Ollama coach backend
 
@@ -74,7 +77,7 @@ export OLLAMA_BASE_URL=http://localhost:11434
 
 ## Quickstart: Reviewer Mode
 
-Reviewer mode mutates one Go file and asks you to find the bug.
+Reviewer mode mutates one source file and asks you to find the bug.
 
 ```sh
 ./bin/codedojo review --repo testdata/sample-go-repo --difficulty 1 --budget 3
@@ -98,6 +101,26 @@ submit <file>:<lineRange> <diagnosis>
 ```
 
 Scoring gives partial credit for the correct file, nearby line range, operator class, and diagnosis quality. Hints subtract from the final score.
+
+## Language Support
+
+CodeDojo detects repositories from standard project markers and uses the detected language's normal test command.
+
+| Language | Detection | Learn | Review | Default tests | Notes |
+|---|---|---:|---:|---|---|
+| Go | `go.mod` | yes | yes | `go test ./...` | Reviewer uses Go AST mutators. |
+| Python | `pyproject.toml`, `requirements.txt`, or `setup.py` | yes | yes | `python -m pytest` | Requires `pytest` for default test runs. |
+| JavaScript | `package.json` | yes | yes | `npm test` | The local fixtures use Node's built-in test runner. |
+| TypeScript | `tsconfig.json` or TypeScript package metadata | yes | yes | `npm test` | Use `.codedojo.yaml` for non-standard runners. |
+| Rust | `Cargo.toml` | yes | yes | `cargo test` | Requires Cargo for learn grading. |
+
+For monorepos or non-standard package managers, add `.codedojo.yaml` at the repo root:
+
+```yaml
+language: typescript
+test_cmd: npm test
+build_cmd: npm run build
+```
 
 ## Quickstart: Newcomer Mode
 

@@ -19,6 +19,7 @@ import (
 	"github.com/dhruvmishra/codedojo/internal/modes/newcomer/history"
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer"
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate"
+	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate/op"
 	"github.com/dhruvmishra/codedojo/internal/repo"
 	"github.com/dhruvmishra/codedojo/internal/sandbox"
 	"github.com/dhruvmishra/codedojo/internal/session"
@@ -190,8 +191,9 @@ func (s *Service) Preflight(ctx context.Context, source string) (Preflight, erro
 			}
 		}
 	}
-	if preflight.Language == "go" {
-		files, err := mutate.CandidateFiles(ctx, loaded.Path, 50)
+	if preflight.Language != "" && preflight.Language != "unknown" {
+		scanCfg := scanConfigForLanguage(preflight.Language)
+		files, err := mutate.CandidateFiles(ctx, loaded.Path, 50, scanCfg)
 		if err != nil {
 			preflight.Review = availabilityError(noReviewCandidatesError(err), 0)
 		} else if len(files) == 0 {
@@ -199,8 +201,6 @@ func (s *Service) Preflight(ctx context.Context, source string) (Preflight, erro
 		} else {
 			preflight.Review = availability(true, "", len(files))
 		}
-	} else if preflight.Language == "python" || preflight.Language == "javascript" || preflight.Language == "typescript" || preflight.Language == "rust" {
-		preflight.Review = availabilityError(reviewUnsupportedError(fmt.Errorf("review for %s is coming soon", preflight.Language)), 0)
 	}
 	preflight.CandidateCount = max(preflight.Learn.CandidateCount, preflight.Review.CandidateCount)
 	return preflight, nil
@@ -265,10 +265,11 @@ func (s *Service) StartReview(ctx context.Context, opts StartOptions) (*LiveSess
 	if err != nil {
 		return nil, err
 	}
-	if lang.Name != "go" {
-		return nil, fmt.Errorf("review mode currently supports Go repositories only; detected %s. Learn mode can use detected test commands for this repo", lang.Name)
+	engine, err := reviewerEngineForLanguage(lang.Name)
+	if err != nil {
+		return nil, err
 	}
-	task, err := reviewer.GenerateTask(ctx, loaded, opts.Difficulty)
+	task, err := reviewer.TaskGenerator{Engine: engine}.GenerateTask(ctx, loaded, opts.Difficulty)
 	if err != nil {
 		return nil, err
 	}
@@ -722,5 +723,40 @@ func newBackendCoach(cfg config.Config) (coach.Coach, error) {
 		return c, nil
 	default:
 		return nil, fmt.Errorf("unknown coach backend %q", cfg.Coach.Backend)
+	}
+}
+
+// reviewerEngineForLanguage returns the appropriate MutationEngine for the
+// detected repo language. Returns an error for unsupported languages.
+func reviewerEngineForLanguage(lang string) (reviewer.MutationEngine, error) {
+	switch lang {
+	case "go", "":
+		return mutate.Engine{Mutators: op.All()}, nil
+	case "python":
+		return reviewer.NewPythonEngine(), nil
+	case "javascript":
+		return reviewer.NewJSEngine(), nil
+	case "typescript":
+		return reviewer.NewTSEngine(), nil
+	case "rust":
+		return reviewer.NewRustEngine(), nil
+	default:
+		return nil, fmt.Errorf("review mode does not yet support language %q", lang)
+	}
+}
+
+// scanConfigForLanguage returns the file scan configuration for the given language.
+func scanConfigForLanguage(lang string) mutate.ScanConfig {
+	switch lang {
+	case "python":
+		return mutate.DefaultPythonScanConfig()
+	case "javascript":
+		return mutate.DefaultJSScanConfig()
+	case "typescript":
+		return mutate.DefaultTSScanConfig()
+	case "rust":
+		return mutate.DefaultRustScanConfig()
+	default:
+		return mutate.DefaultGoScanConfig()
 	}
 }

@@ -16,17 +16,25 @@ import (
 	"github.com/dhruvmishra/codedojo/internal/repo"
 )
 
+// Engine selects a mutation site in a Go repository and applies it.
 type Engine struct {
 	Mutators []Mutator
 	LogLimit int
 	Now      func() time.Time
+	// ScanCfg controls which files are considered. Defaults to Go scan config.
+	ScanCfg ScanConfig
+	// GateCfg controls post-mutation gates. Defaults to Go gate config.
+	GateCfg GateConfig
 }
+
+// Language returns "go". Engine satisfies the reviewer.MutationEngine interface.
+func (Engine) Language() string { return "go" }
 
 func (e Engine) SelectAndApply(ctx context.Context, r repo.Repo, difficulty int) (MutationLog, error) {
 	if len(e.Mutators) == 0 {
 		return MutationLog{}, fmt.Errorf("at least one mutator is required")
 	}
-	files, err := CandidateFiles(ctx, r.Path, e.LogLimit)
+	files, err := CandidateFiles(ctx, r.Path, e.LogLimit, e.ScanCfg)
 	if err != nil {
 		return MutationLog{}, err
 	}
