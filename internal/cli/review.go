@@ -11,6 +11,7 @@ import (
 	"github.com/dhruvmishra/codedojo/internal/coach"
 	"github.com/dhruvmishra/codedojo/internal/config"
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate/op"
+	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate/textop"
 	"github.com/spf13/cobra"
 )
 
@@ -296,6 +297,11 @@ func parseSubmissionTarget(target string) (string, int, int, error) {
 
 func inferOperatorClass(diagnosis string) string {
 	diagnosis = strings.ToLower(diagnosis)
+	for _, mutator := range allTextMutators() {
+		if strings.Contains(diagnosis, strings.ToLower(mutator.Name())) {
+			return mutator.Name()
+		}
+	}
 	for _, mutator := range op.All() {
 		if strings.Contains(diagnosis, strings.ToLower(mutator.Name())) {
 			return mutator.Name()
@@ -314,4 +320,13 @@ func inferOperatorClass(diagnosis string) string {
 		return "slicebounds"
 	}
 	return ""
+}
+
+func allTextMutators() []textop.TextMutator {
+	var mutators []textop.TextMutator
+	mutators = append(mutators, textop.AllPython()...)
+	mutators = append(mutators, textop.AllJS()...)
+	mutators = append(mutators, textop.AllTS()...)
+	mutators = append(mutators, textop.AllRust()...)
+	return mutators
 }

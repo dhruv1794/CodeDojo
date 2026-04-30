@@ -312,13 +312,6 @@ func firstLine(value string) string {
 	return strings.TrimSpace(line)
 }
 
-func upperFirst(value string) string {
-	if value == "" {
-		return ""
-	}
-	return strings.ToUpper(value[:1]) + value[1:]
-}
-
 var identifierPattern = regexp.MustCompile(`\b[A-Za-z_][A-Za-z0-9_]*\b`)
 
 var conventionalCommitPrefixes = []string{"feat:", "feature:", "fix:", "bugfix:", "chore:", "refactor:", "test:", "tests:"}
@@ -332,8 +325,42 @@ var goKeywords = map[string]bool{
 }
 
 var commonWords = map[string]bool{
+	// Articles, conjunctions, prepositions
 	"and": true, "are": true, "but": true, "can": true, "for": true, "from": true,
 	"has": true, "have": true, "into": true, "not": true, "the": true, "this": true,
 	"that": true, "then": true, "there": true, "these": true, "those": true, "with": true,
 	"when": true, "where": true, "will": true, "your": true,
+	// Common English verbs that double as identifiers in code
+	"add": true, "get": true, "set": true, "put": true, "run": true, "use": true,
+	"let": true, "try": true, "see": true, "was": true, "had": true, "did": true,
+	"via": true, "may": true, "got": true,
+	// Common adjectives / determiners
+	"all": true, "any": true, "new": true, "old": true, "big": true, "bad": true,
+	"raw": true, "low": true, "top": true, "sub": true, "due": true, "per": true,
+	// Common nouns / programming words used as identifiers
+	"name": true, "file": true, "path": true, "data": true, "text": true,
+	"code": true, "time": true, "size": true, "user": true, "item": true,
+	"list": true, "node": true, "next": true, "done": true, "info": true,
+	"args": true, "main": true, "make": true, "only": true, "some": true,
+	// High-frequency identifier stems that block natural descriptions
+	"error": true, "result": true, "value": true, "count": true, "index": true,
+	"limit": true, "total": true, "input": true, "output": true, "check": true,
+	"start": true, "stop":  true, "close": true, "open":  true, "read": true,
+	"write": true, "send":  true, "handle": true, "process": true, "create": true,
+	"update": true, "delete": true, "remove": true, "insert": true, "load": true,
+	"save": true, "parse": true, "format": true, "print": true, "build": true,
+	"fetch": true, "apply": true, "reset": true, "clear": true, "flush": true,
+	"init": true, "setup": true, "clean": true, "move": true, "copy": true,
+	"sort": true, "find": true, "filter": true, "map": true, "each": true,
+	"step": true, "stage": true, "state": true, "event": true, "field": true,
+	"type": true, "mode": true, "rate": true, "base": true, "body": true,
+	"response": true, "request": true, "message": true, "status": true,
+	// Common language builtins / keywords that leak into diffs across languages
+	"test": true, "function": true, "require": true, "module": true, "exports": true,
+	"assert": true, "expect": true, "describe": true, "spec": true,
+	// Short variable names that are also real English words (3+ chars, common in code)
+	"err": true, "res": true, "req": true, "ctx": true, "val": true, "key": true,
+	"msg": true, "buf": true, "tmp": true, "idx": true, "ptr": true, "ref": true,
+	"str": true, "num": true, "len": true, "cap": true, "sum": true, "avg": true,
+	"now": true, "end": true, "log": true, "ok": true, "max": true, "min": true,
 }

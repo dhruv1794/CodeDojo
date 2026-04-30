@@ -134,8 +134,8 @@ func noReviewCandidatesError(cause error) ProductError {
 	return ProductError{
 		Code:    "no_review_candidates",
 		Title:   "No hidden-bug candidates found",
-		Message: "Review mode looks for non-generated Go source files with nearby tests and mutation sites such as comparisons, conditionals, error checks, or slice bounds.",
-		Actions: []string{"Try a Go repository with source files and matching _test.go files.", "Commit the source and tests before starting Review.", "Use Learn if this repo has useful tested feature commits."},
+		Message: "Review mode looks for source files with nearby tests and mutation sites such as comparisons, conditionals, error checks, or slice bounds.",
+		Actions: []string{"Try a repository with source files and matching test files.", "Commit the source and tests before starting Review.", "Use Learn if this repo has useful tested feature commits."},
 		cause:   cause,
 	}
 }

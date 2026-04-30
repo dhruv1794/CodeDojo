@@ -227,11 +227,20 @@ func patchPath(from, to diff.File) string {
 
 func isTestFile(path string) bool {
 	base := filepath.Base(path)
+	slashPath := filepath.ToSlash(path)
 	return strings.HasSuffix(base, "_test.go") ||
 		strings.HasSuffix(base, ".test.js") ||
 		strings.HasSuffix(base, ".spec.js") ||
+		strings.HasSuffix(base, ".test.jsx") ||
+		strings.HasSuffix(base, ".spec.jsx") ||
+		strings.HasSuffix(base, ".test.ts") ||
+		strings.HasSuffix(base, ".spec.ts") ||
+		strings.HasSuffix(base, ".test.tsx") ||
+		strings.HasSuffix(base, ".spec.tsx") ||
 		strings.HasSuffix(base, "_test.py") ||
-		strings.HasPrefix(base, "test_")
+		strings.HasPrefix(base, "test_") ||
+		strings.HasPrefix(slashPath, "tests/") ||
+		strings.Contains(slashPath, "/tests/")
 }
 
 func isDependencyFile(path string) bool {

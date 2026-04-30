@@ -1,26 +1,31 @@
 package web
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestStaticAssetsKeepDemoPolishHooks(t *testing.T) {
+func TestStaticAssetsEmbedReactBuild(t *testing.T) {
 	index := readStaticAsset(t, "static/index.html")
-	styles := readStaticAsset(t, "static/styles.css")
-	app := readStaticAsset(t, "static/app.js")
 
 	for _, want := range []string{
 		`<meta name="viewport"`,
-		`id="hero-scan-state"`,
-		`id="start-button"`,
-		`id="timer-label"`,
-		`id="progress-label"`,
+		`id="root"`,
+		`type="module"`,
+		`/assets/`,
 	} {
 		if !strings.Contains(index, want) {
 			t.Fatalf("index.html missing %q", want)
 		}
 	}
+}
+
+func TestReactSourceKeepsDemoPolishHooks(t *testing.T) {
+	styles := readRepoFile(t, "web", "src", "styles.css")
+	app := readRepoFile(t, "web", "src", "main.jsx")
+
 	for _, want := range []string{
 		"@media (min-width: 981px) and (max-width: 1260px)",
 		"@media (max-width: 980px)",
@@ -33,13 +38,14 @@ func TestStaticAssetsKeepDemoPolishHooks(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"function setBusy(",
-		"function startTimer(",
-		`event.altKey && ["1", "2", "3", "4", "5"]`,
-		`event.key === "Enter"`,
+		`id="hero-scan-state"`,
+		`id="start-button"`,
+		`id="timer-label"`,
+		`id="progress-label"`,
+		`@monaco-editor/react`,
 	} {
 		if !strings.Contains(app, want) {
-			t.Fatalf("app.js missing %q", want)
+			t.Fatalf("main.jsx missing %q", want)
 		}
 	}
 }
@@ -49,6 +55,16 @@ func readStaticAsset(t *testing.T, name string) string {
 	data, err := staticFS.ReadFile(name)
 	if err != nil {
 		t.Fatalf("read %s: %v", name, err)
+	}
+	return string(data)
+}
+
+func readRepoFile(t *testing.T, parts ...string) string {
+	t.Helper()
+	path := filepath.Join(append([]string{"..", ".."}, parts...)...)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(data)
 }
