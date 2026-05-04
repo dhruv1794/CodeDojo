@@ -752,11 +752,14 @@ func reviewerEngineForLanguage(lang string) (reviewer.MutationEngine, error) {
 	case "python":
 		return reviewer.NewPythonEngine(), nil
 	case "javascript":
-		return reviewer.NewJSEngine(), nil
+		e := mutate.NewJSASTEngine()
+		return e, nil
 	case "typescript":
-		return reviewer.NewTSEngine(), nil
+		e := mutate.NewTSASTEngine()
+		return e, nil
 	case "rust":
-		return reviewer.NewRustEngine(), nil
+		e := mutate.NewRustASTEngine()
+		return e, nil
 	default:
 		return nil, fmt.Errorf("review mode does not yet support language %q", lang)
 	}
