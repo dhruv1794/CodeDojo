@@ -1,14 +1,74 @@
 :root {
-  color-scheme: light;
-  --bg: #f6f5f2;
-  --ink: #171717;
-  --muted: #65615a;
-  --line: #d8d4ca;
-  --panel: #ffffff;
-  --accent: #176b5b;
-  --accent-ink: #ffffff;
-  --warn: #8c4b16;
+  color-scheme: dark;
+  --bg: #1a1814;
+  --ink: #e8e0d4;
+  --muted: #8a8578;
+  --line: #3a3630;
+  --panel: #24211c;
+  --accent: #d4a445;
+  --accent-ink: #1a1814;
+  --warn: #e2b17d;
+  --surface: #2a2722;
+  --surface-hover: #322e28;
+  --surface-dim: #1e1c18;
+  --success-border: #4a8a7a;
+  --success-bg: rgba(74, 138, 122, 0.12);
+  --success-text: #7ec9b5;
+  --highlight: #d4a445;
+  --highlight-bg: rgba(212, 164, 69, 0.12);
+  --highlight-text: #1a1814;
+  --code-bg: #0f0e0c;
+  --code-fg: #e8e0d4;
+  --error-bg: rgba(226, 177, 125, 0.12);
+  --error-border: #8c6b3a;
+  --error-text: #e2b17d;
+  --sb1: #4a8a7a;
+  --sb2: #d4a445;
+  --sb3: #6a7ec9;
+  --sb4: #e2b17d;
+  --line-num-bg: #1e1c18;
+  --line-num-hover: #2e2b26;
+  --line-num-highlight: #6b5a28;
+  --line-num-selected: rgba(74, 138, 122, 0.2);
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f6f5f2;
+    --ink: #171717;
+    --muted: #65615a;
+    --line: #d8d4ca;
+    --panel: #ffffff;
+    --accent: #176b5b;
+    --accent-ink: #ffffff;
+    --warn: #8c4b16;
+    --surface: #ffffff;
+    --surface-hover: #f0eee8;
+    --surface-dim: #f8f7f4;
+    --success-border: #b7d5cb;
+    --success-bg: #f4fbf8;
+    --success-text: #103f35;
+    --highlight: #f4d35e;
+    --highlight-bg: #f4fbf8;
+    --highlight-text: #171717;
+    --code-bg: #111111;
+    --code-fg: #f5f5f5;
+    --error-bg: #fff8ee;
+    --error-border: #e2b17d;
+    --error-text: #6f3508;
+    --sb1: #cfe8df;
+    --sb2: #f4d35e;
+    --sb3: #b9c6e8;
+    --sb4: #e2b17d;
+    --line-num-bg: #f3f1eb;
+    --line-num-hover: #ded9cc;
+    --line-num-highlight: #f4d35e;
+    --line-num-selected: #cfe8df;
+    --shadow: 0 18px 40px rgba(23, 23, 23, .08);
+  }
 }
 
 * {
@@ -34,7 +94,7 @@ textarea {
 
 button {
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   border-radius: 6px;
   padding: 8px 11px;
@@ -91,9 +151,9 @@ form button[type="submit"] {
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   padding: 14px;
-  box-shadow: 0 18px 40px rgba(23, 23, 23, .08);
+  box-shadow: var(--shadow);
 }
 
 .signal-row {
@@ -120,19 +180,19 @@ form button[type="submit"] {
 .signal-bars span {
   height: 9px;
   border-radius: 999px;
-  background: #cfe8df;
+  background: var(--sb1);
 }
 
 .signal-bars span:nth-child(2) {
-  background: #f4d35e;
+  background: var(--sb2);
 }
 
 .signal-bars span:nth-child(3) {
-  background: #b9c6e8;
+  background: var(--sb3);
 }
 
 .signal-bars span:nth-child(4) {
-  background: #e2b17d;
+  background: var(--sb4);
 }
 
 .eyebrow {
@@ -173,15 +233,15 @@ form button[type="submit"] {
 }
 
 .error-card {
-  border: 1px solid #e2b17d;
+  border: 1px solid var(--error-border);
   border-radius: 6px;
-  background: #fff8ee;
+  background: var(--error-bg);
   color: var(--warn);
   padding: 10px;
 }
 
 .error-card strong {
-  color: #6f3508;
+  color: var(--error-text);
 }
 
 .error-card span {
@@ -205,7 +265,7 @@ form button[type="submit"] {
   min-height: 210px;
   padding: 16px;
   text-align: left;
-  background: #fff;
+  background: var(--surface);
   border-color: var(--line);
   align-content: start;
 }
@@ -217,11 +277,11 @@ form button[type="submit"] {
 }
 
 .mode-card.selected {
-  background: #f4fbf8;
+  background: var(--success-bg);
 }
 
 .mode-card.unavailable {
-  background: #f5f3ee;
+  background: var(--surface-dim);
 }
 
 .mode-card-top {
@@ -278,7 +338,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 6px;
   color: var(--ink);
-  background: #fff;
+  background: var(--surface);
   padding: 9px 10px;
 }
 
@@ -324,15 +384,15 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 6px 9px;
-  background: #fff;
+  background: var(--surface);
   font-size: 13px;
 }
 
 #timer-label,
 #progress-label {
-  border-color: #b7d5cb;
-  background: #f4fbf8;
-  color: #103f35;
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success-text);
 }
 
 .grid {
@@ -379,7 +439,7 @@ textarea {
   color: var(--muted);
   font-size: 13px;
   line-height: 1.25;
-  background: #fff;
+  background: var(--surface);
 }
 
 .checklist li::before {
@@ -391,13 +451,13 @@ textarea {
   height: 12px;
   border: 1px solid var(--line);
   border-radius: 50%;
-  background: #fff;
+  background: var(--surface);
 }
 
 .checklist li.done {
   color: var(--ink);
-  border-color: #b7d5cb;
-  background: #f4fbf8;
+  border-color: var(--success-border);
+  background: var(--success-bg);
 }
 
 .checklist li.done::before {
@@ -441,7 +501,7 @@ textarea {
   width: 100%;
   padding: 8px;
   text-align: left;
-  background: #fff;
+  background: var(--surface);
   border-color: var(--line);
   overflow: hidden;
 }
@@ -486,7 +546,7 @@ textarea {
 
 .file:hover,
 .file.active {
-  background: #f0eee8;
+  background: var(--surface-hover);
 }
 
 .file.dir {
@@ -514,7 +574,7 @@ textarea {
   width: 52px;
   overflow: auto;
   border-right: 1px solid var(--line);
-  background: #f3f1eb;
+  background: var(--line-num-bg);
   color: var(--muted);
   padding: 10px 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -541,7 +601,7 @@ textarea {
 
 .line-numbers button:hover,
 .line-numbers button.selected-line {
-  background: #ded9cc;
+  background: var(--line-num-hover);
   color: var(--ink);
 }
 
@@ -552,19 +612,19 @@ textarea {
 }
 
 .line-number.highlight {
-  background: #f4d35e;
-  color: #171717;
+  background: var(--line-num-highlight);
+  color: var(--highlight-text);
   font-weight: 700;
 }
 
 .line-number.selected {
-  background: #cfe8df;
-  color: #103f35;
+  background: var(--line-num-selected);
+  color: var(--success-text);
   font-weight: 700;
 }
 
 .line-number.selected.highlight {
-  background: linear-gradient(90deg, #cfe8df 0 48%, #f4d35e 48% 100%);
+  background: linear-gradient(90deg, var(--line-num-selected) 0 48%, var(--line-num-highlight) 48% 100%);
 }
 
 #file-content {
@@ -592,7 +652,7 @@ textarea {
   border-right: 1px solid var(--line);
   border-radius: 0;
   padding: 10px 4px;
-  background: #f8f7f4;
+  background: var(--surface-dim);
   color: var(--muted);
   font-size: 13px;
 }
@@ -602,7 +662,7 @@ textarea {
 }
 
 .tab.active {
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   box-shadow: inset 0 -2px 0 var(--accent);
   font-weight: 700;
@@ -649,27 +709,27 @@ pre {
   border-radius: 6px;
   margin: 0;
   padding: 10px;
-  background: #111;
-  color: #f5f5f5;
+  background: var(--code-bg);
+  color: var(--code-fg);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
 }
 
 .empty-output {
-  background: #f8f7f4;
+  background: var(--surface-dim);
   color: var(--muted);
 }
 
 .is-busy .empty-output,
 .is-busy pre:not(.error-output) {
-  border-color: #b7d5cb;
+  border-color: var(--success-border);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .error-output {
-  background: #fff8ee;
-  color: #6f3508;
-  border-color: #e2b17d;
+  background: var(--error-bg);
+  color: var(--error-text);
+  border-color: var(--error-border);
 }
 
 .submit {
@@ -689,7 +749,7 @@ pre {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 9px;
-  background: #f8f7f4;
+  background: var(--surface-dim);
   font-size: 13px;
   line-height: 1.35;
 }
@@ -721,8 +781,8 @@ pre {
 }
 
 .presubmit-checklist li.done {
-  border-color: #b7d5cb;
-  background: #f4fbf8;
+  border-color: var(--success-border);
+  background: var(--success-bg);
   color: var(--ink);
 }
 
@@ -748,7 +808,7 @@ pre {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
-  background: #f8f7f4;
+  background: var(--surface-dim);
   font-size: 13px;
   line-height: 1.35;
 }
@@ -770,7 +830,7 @@ pre {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
-  background: #fff;
+  background: var(--surface);
 }
 
 .result-card h4 {
