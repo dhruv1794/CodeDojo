@@ -18,10 +18,13 @@ type Hint struct {
 }
 
 type HintRequest struct {
-	SessionID string
-	Level     HintLevel
-	Context   string
-	Strict    bool
+	SessionID  string
+	Level      HintLevel
+	Context    string
+	Strict     bool
+	Language   string
+	Difficulty int
+	HintBudget int
 }
 
 type GradeRequest struct {

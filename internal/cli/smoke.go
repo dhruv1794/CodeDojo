@@ -76,7 +76,7 @@ func runSmoke(ctx context.Context, cmd *cobra.Command) error {
 			return fmt.Errorf("%v failed\nstdout:\n%s\nstderr:\n%s", run, result.Stdout, result.Stderr)
 		}
 	}
-	hint, err := manager.RequestHint(ctx, sess.ID, coach.LevelNudge, "smoke")
+	hint, err := manager.RequestHint(ctx, sess.ID, coach.LevelNudge, "smoke", "Go", 3, 3)
 	if err != nil {
 		return err
 	}

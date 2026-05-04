@@ -70,11 +70,12 @@ func (c *Coach) Usage() Usage {
 // Hint asks the local model for a short Socratic hint.
 func (c *Coach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
 	system, err := prompts.Render("reviewer/system.tmpl", map[string]any{
-		"Difficulty": 0,
-		"HintBudget": 0,
+		"Difficulty": req.Difficulty,
+		"HintBudget": req.HintBudget,
 		"Level":      hintLevelName(req.Level),
 		"Strict":     req.Strict,
-		"Context":    "",
+		"Context":    req.Context,
+		"Language":   req.Language,
 	})
 	if err != nil {
 		return coach.Hint{}, fmt.Errorf("render hint system prompt: %w", err)

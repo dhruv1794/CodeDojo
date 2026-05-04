@@ -2,12 +2,14 @@ package newcomer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/dhruvmishra/codedojo/internal/coach"
 	"github.com/dhruvmishra/codedojo/internal/coach/prompts"
 	"github.com/dhruvmishra/codedojo/internal/coach/validator"
 	"github.com/dhruvmishra/codedojo/internal/modes/newcomer/history"
@@ -52,7 +54,12 @@ type TaskGenerator struct {
 	ScanLimit  int
 }
 
-type PromptSummarizer struct{}
+type DeterministicSummarizer struct{}
+
+type AISummarizer struct {
+	Coach    coach.Coach
+	Fallback Summarizer
+}
 
 func GenerateTask(ctx context.Context, r repo.Repo, difficulty int) (Task, error) {
 	return TaskGenerator{}.GenerateTask(ctx, r, difficulty)
@@ -79,7 +86,7 @@ func (g TaskGenerator) GenerateTask(ctx context.Context, r repo.Repo, difficulty
 	banned := IntroducedIdentifiers(state.ReferenceDiff)
 	summarizer := g.Summarizer
 	if summarizer == nil {
-		summarizer = PromptSummarizer{}
+		summarizer = DeterministicSummarizer{}
 	}
 	description, err := summarizer.Summarize(ctx, SummaryRequest{
 		CommitMessage:     state.CommitMessage,
@@ -107,7 +114,7 @@ func (g TaskGenerator) GenerateTask(ctx context.Context, r repo.Repo, difficulty
 	}, nil
 }
 
-func (PromptSummarizer) Summarize(ctx context.Context, req SummaryRequest) (string, error) {
+func (DeterministicSummarizer) Summarize(ctx context.Context, req SummaryRequest) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -129,6 +136,84 @@ func (PromptSummarizer) Summarize(ctx context.Context, req SummaryRequest) (stri
 		summary = "Recreate the behavior exercised by the changed tests."
 	}
 	return summary, nil
+}
+
+func (s AISummarizer) Summarize(ctx context.Context, req SummaryRequest) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if s.Coach == nil {
+		fallback := s.Fallback
+		if fallback == nil {
+			fallback = DeterministicSummarizer{}
+		}
+		return fallback.Summarize(ctx, req)
+	}
+	system, err := prompts.Render("newcomer/summarize.tmpl", map[string]any{
+		"CommitMessage":     firstLine(req.CommitMessage),
+		"ReferenceDiff":     req.ReferenceDiff,
+		"BannedIdentifiers": strings.Join(req.BannedIdentifiers, ", "),
+	})
+	if err != nil {
+		return "", fmt.Errorf("render newcomer summary prompt: %w", err)
+	}
+	system += "\n\nRespond with ONLY a JSON object (no markdown, no code fences) with these keys:\n" +
+		"- \"summary\": a one-to-two-sentence human-readable task description\n" +
+		"- \"behavior_signals\": observable behaviors the learner should look for in test output\n" +
+		"- \"non_signals\": aspects of the diff that do NOT matter for this task\n\n" +
+		"Example: {\"summary\":\"...\",\"behavior_signals\":[\"tests fail with...\"],\"non_signals\":[\"unrelated refactoring\"]}"
+	grade, err := s.Coach.Grade(ctx, coach.GradeRequest{
+		Rubric: system,
+		Answer: "",
+	})
+	if err != nil {
+		fallback := s.Fallback
+		if fallback == nil {
+			fallback = DeterministicSummarizer{}
+		}
+		return fallback.Summarize(ctx, req)
+	}
+	parsed, err := parseAISummary(grade.Feedback)
+	if err != nil {
+		fallback := s.Fallback
+		if fallback == nil {
+			fallback = DeterministicSummarizer{}
+		}
+		return fallback.Summarize(ctx, req)
+	}
+	summary := strings.TrimSpace(parsed.Summary)
+	if summary == "" || needsFallbackSummary(summary) {
+		fallback := s.Fallback
+		if fallback == nil {
+			fallback = DeterministicSummarizer{}
+		}
+		return fallback.Summarize(ctx, req)
+	}
+	return summary, nil
+}
+
+type aiSummarizeOutput struct {
+	Summary         string   `json:"summary"`
+	BehaviorSignals []string `json:"behavior_signals"`
+	NonSignals      []string `json:"non_signals"`
+}
+
+func parseAISummary(feedback string) (aiSummarizeOutput, error) {
+	feedback = strings.TrimSpace(feedback)
+	if feedback == "" {
+		return aiSummarizeOutput{}, fmt.Errorf("empty feedback")
+	}
+	start := strings.Index(feedback, "{")
+	if start < 0 {
+		return aiSummarizeOutput{}, fmt.Errorf("no JSON object found in feedback")
+	}
+	decoder := json.NewDecoder(strings.NewReader(feedback[start:]))
+	decoder.DisallowUnknownFields()
+	var out aiSummarizeOutput
+	if err := decoder.Decode(&out); err != nil {
+		return aiSummarizeOutput{}, fmt.Errorf("parse AI summary JSON: %w", err)
+	}
+	return out, nil
 }
 
 func SuggestedFiles(files []history.ChangedFile) []SuggestedFile {

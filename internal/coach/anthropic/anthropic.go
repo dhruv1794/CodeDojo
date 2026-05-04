@@ -107,11 +107,12 @@ func (c *Coach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, er
 		return coach.Hint{}, errors.New("anthropic: APIKey is empty")
 	}
 	system, err := prompts.Render("reviewer/system.tmpl", map[string]any{
-		"Difficulty": 0,
-		"HintBudget": 0,
+		"Difficulty": req.Difficulty,
+		"HintBudget": req.HintBudget,
 		"Level":      hintLevelName(req.Level),
 		"Strict":     req.Strict,
-		"Context":    "",
+		"Context":    req.Context,
+		"Language":   req.Language,
 	})
 	if err != nil {
 		return coach.Hint{}, fmt.Errorf("render hint system prompt: %w", err)
