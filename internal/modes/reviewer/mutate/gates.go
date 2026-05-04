@@ -42,9 +42,6 @@ func (cfg *GateConfig) withDefaults() GateConfig {
 	if out.MinPassingRatio == 0 {
 		out.MinPassingRatio = 0.5
 	}
-	if len(out.BuildCmd) == 0 {
-		out.BuildCmd = []string{"go", "vet", "./..."}
-	}
 	if len(out.TestCmd) == 0 {
 		out.TestCmd = []string{"go", "test", "-json", "./..."}
 		out.TestOutputJSON = true

@@ -15,7 +15,7 @@ func (RustBoundary) Name() string     { return "rs-boundary" }
 func (RustBoundary) Language() string { return "rust" }
 func (RustBoundary) Difficulty() int  { return 1 }
 
-var rsBoundaryRe = regexp.MustCompile(`([^<>!])(<|>)([^=\n/])`)
+var rsBoundaryRe = regexp.MustCompile(`([^<>!-])(<|>)([^=\n/])`)
 
 func (RustBoundary) Candidates(content string) []Site {
 	lines := strings.Split(content, "\n")

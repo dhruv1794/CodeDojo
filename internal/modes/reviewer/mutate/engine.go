@@ -58,6 +58,10 @@ func (e Engine) SelectAndApply(ctx context.Context, r repo.Repo, difficulty int)
 	if err := os.WriteFile(full, formatted.Bytes(), 0o644); err != nil {
 		return MutationLog{}, fmt.Errorf("write mutated file: %w", err)
 	}
+	if _, err := RunGates(ctx, r.Path, e.GateCfg); err != nil {
+		os.WriteFile(full, before, 0o644)
+		return MutationLog{}, fmt.Errorf("gates rejected mutation: %w", err)
+	}
 	now := e.now()
 	mutation.Operator = candidate.Mutator.Name()
 	mutation.Difficulty = candidate.Mutator.Difficulty()
