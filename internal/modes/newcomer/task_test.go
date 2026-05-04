@@ -2,12 +2,14 @@ package newcomer
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/dhruvmishra/codedojo/internal/coach"
 	"github.com/dhruvmishra/codedojo/internal/modes/newcomer/history"
 	"github.com/dhruvmishra/codedojo/internal/repo"
 	gogit "github.com/go-git/go-git/v5"
@@ -72,8 +74,8 @@ func TestGenerateTaskRejectsLeakySummary(t *testing.T) {
 	}
 }
 
-func TestPromptSummarizerFallsBackWhenIdentifierStrippingDestroysSummary(t *testing.T) {
-	summary, err := (PromptSummarizer{}).Summarize(context.Background(), SummaryRequest{
+func TestDeterministicSummarizerFallsBackWhenIdentifierStrippingDestroysSummary(t *testing.T) {
+	summary, err := (DeterministicSummarizer{}).Summarize(context.Background(), SummaryRequest{
 		CommitMessage:     "fix: update graph view renderer",
 		ReferenceDiff:     "+placeholder",
 		ChangedFiles:      []history.ChangedFile{{Path: "internal/dashboard/view.go"}, {Path: "internal/dashboard/view_test.go", Test: true}},
@@ -87,8 +89,8 @@ func TestPromptSummarizerFallsBackWhenIdentifierStrippingDestroysSummary(t *test
 	}
 }
 
-func TestPromptSummarizerUsesCommitMessageFilesAndTests(t *testing.T) {
-	summary, err := (PromptSummarizer{}).Summarize(context.Background(), SummaryRequest{
+func TestDeterministicSummarizerUsesCommitMessageFilesAndTests(t *testing.T) {
+	summary, err := (DeterministicSummarizer{}).Summarize(context.Background(), SummaryRequest{
 		CommitMessage: "feat(auth): allow expired invitations to be refreshed",
 		ChangedFiles: []history.ChangedFile{
 			{Path: "internal/auth/invitations.go"},
@@ -105,7 +107,7 @@ func TestPromptSummarizerUsesCommitMessageFilesAndTests(t *testing.T) {
 	}
 }
 
-func TestPromptSummarizerQualityForRealishMessagesAndPythonDiffs(t *testing.T) {
+func TestDeterministicSummarizerQualityForRealishMessagesAndPythonDiffs(t *testing.T) {
 	tests := []struct {
 		name       string
 		req        SummaryRequest
@@ -169,7 +171,7 @@ diff --git a/tests/test_retries.py b/tests/test_retries.py
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			summary, err := (PromptSummarizer{}).Summarize(context.Background(), tt.req)
+			summary, err := (DeterministicSummarizer{}).Summarize(context.Background(), tt.req)
 			if err != nil {
 				t.Fatalf("Summarize() error = %v", err)
 			}
@@ -221,6 +223,153 @@ func TestIntroducedIdentifiersIgnoresCommonWords(t *testing.T) {
 	}
 	if !contains(got, "build_graph") || !contains(got, "Graph") {
 		t.Fatalf("IntroducedIdentifiers() = %#v, want real identifiers", got)
+	}
+}
+
+func TestAISummarizerParsesValidJSONFeedback(t *testing.T) {
+	s := AISummarizer{
+		Coach: aiSummarizerCoach{feedback: `0
+{"summary": "Add a retry mechanism for failed invoice charges.", "behavior_signals": ["tests fail with timeout error"], "non_signals": ["unrelated logging change"]}`},
+	}
+	summary, err := s.Summarize(context.Background(), SummaryRequest{
+		CommitMessage: "feat(billing): retry failed invoice charges",
+		ChangedFiles:  []history.ChangedFile{{Path: "billing/retries.py"}},
+	})
+	if err != nil {
+		t.Fatalf("Summarize() error = %v", err)
+	}
+	want := "Add a retry mechanism for failed invoice charges."
+	if summary != want {
+		t.Fatalf("Summarize() = %q, want %q", summary, want)
+	}
+}
+
+func TestAISummarizerFallsBackWhenCoachReturnsError(t *testing.T) {
+	s := AISummarizer{
+		Coach:    aiSummarizerCoach{err: errors.New("backend unavailable")},
+		Fallback: DeterministicSummarizer{},
+	}
+	summary, err := s.Summarize(context.Background(), SummaryRequest{
+		CommitMessage: "feat(auth): allow expired invitations to be refreshed",
+		ChangedFiles: []history.ChangedFile{
+			{Path: "internal/auth/invitations.go"},
+			{Path: "internal/auth/invitations_test.go", Test: true},
+		},
+		BannedIdentifiers: []string{"RefreshInvitation"},
+	})
+	if err != nil {
+		t.Fatalf("Summarize() error = %v, want fallback success", err)
+	}
+	want := "Recreate the requested internal auth behavior: allow expired invitations to be refreshed. Use the changed tests as the acceptance criteria."
+	if summary != want {
+		t.Fatalf("Summarize() = %q, want %q", summary, want)
+	}
+}
+
+func TestAISummarizerFallsBackWhenCoachIsNil(t *testing.T) {
+	s := AISummarizer{
+		Coach:    nil,
+		Fallback: DeterministicSummarizer{},
+	}
+	summary, err := s.Summarize(context.Background(), SummaryRequest{
+		CommitMessage: "fix(auth): allow expired invitations to be refreshed",
+		ChangedFiles: []history.ChangedFile{
+			{Path: "internal/auth/invitations.go"},
+			{Path: "internal/auth/invitations_test.go", Test: true},
+		},
+		BannedIdentifiers: []string{"RefreshInvitation"},
+	})
+	if err != nil {
+		t.Fatalf("Summarize() error = %v, want fallback success", err)
+	}
+	want := "Recreate the requested internal auth behavior: allow expired invitations to be refreshed. Use the changed tests as the acceptance criteria."
+	if summary != want {
+		t.Fatalf("Summarize() = %q, want %q", summary, want)
+	}
+}
+
+func TestAISummarizerFallsBackWhenFeedbackIsNotJSON(t *testing.T) {
+	s := AISummarizer{
+		Coach:    aiSummarizerCoach{feedback: "0\nSure, here's a nice summary: The feature adds retry logic."},
+		Fallback: DeterministicSummarizer{},
+	}
+	summary, err := s.Summarize(context.Background(), SummaryRequest{
+		CommitMessage: "feat(billing): retry failed invoice charges",
+		ChangedFiles:  []history.ChangedFile{{Path: "billing/retries.go"}, {Path: "billing/retries_test.go", Test: true}},
+	})
+	if err != nil {
+		t.Fatalf("Summarize() error = %v, want fallback success", err)
+	}
+	expected := "Recreate the requested billing behavior: retry failed invoice charges. Use the changed tests as the acceptance criteria."
+	if summary != expected {
+		t.Fatalf("Summarize() = %q, want %q", summary, expected)
+	}
+}
+
+func TestAISummarizerFallsBackWhenSummaryIsEmpty(t *testing.T) {
+	s := AISummarizer{
+		Coach:    aiSummarizerCoach{feedback: "0\n{\"summary\": \"\", \"behavior_signals\": [], \"non_signals\": []}"},
+		Fallback: DeterministicSummarizer{},
+	}
+	summary, err := s.Summarize(context.Background(), SummaryRequest{
+		CommitMessage: "feat(billing): retry failed invoice charges",
+		ChangedFiles:  []history.ChangedFile{{Path: "billing/retries.go"}, {Path: "billing/retries_test.go", Test: true}},
+	})
+	if err != nil {
+		t.Fatalf("Summarize() error = %v, want fallback success", err)
+	}
+	expected := "Recreate the requested billing behavior: retry failed invoice charges. Use the changed tests as the acceptance criteria."
+	if summary != expected {
+		t.Fatalf("Summarize() = %q, want %q", summary, expected)
+	}
+}
+
+func TestParseAISummary(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		want    string
+		wantErr bool
+	}{
+		{
+			name:    "valid full JSON",
+			raw:     `{"summary":"Add retry logic.","behavior_signals":["timeout"],"non_signals":["logging"]}`,
+			want:    "Add retry logic.",
+			wantErr: false,
+		},
+		{
+			name:    "JSON after score line",
+			raw:     "0\n{\"summary\":\"Fix the boundary.\",\"behavior_signals\":[],\"non_signals\":[]}",
+			want:    "Fix the boundary.",
+			wantErr: false,
+		},
+		{
+			name:    "empty string",
+			raw:     "",
+			wantErr: true,
+		},
+		{
+			name:    "no JSON object",
+			raw:     "Here is a summary: add retry logic",
+			wantErr: true,
+		},
+		{
+			name:    "JSON missing summary key",
+			raw:     `{"behavior_signals":[],"non_signals":[]}`,
+			want:    "",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseAISummary(tt.raw)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseAISummary() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got.Summary != tt.want {
+				t.Fatalf("parseAISummary().Summary = %q, want %q", got.Summary, tt.want)
+			}
+		})
 	}
 }
 
@@ -293,4 +442,20 @@ func contains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+type aiSummarizerCoach struct {
+	feedback string
+	err      error
+}
+
+func (c aiSummarizerCoach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+	return coach.Hint{}, nil
+}
+
+func (c aiSummarizerCoach) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+	if c.err != nil {
+		return coach.Grade{}, c.err
+	}
+	return coach.Grade{Score: 0, Feedback: c.feedback}, nil
 }

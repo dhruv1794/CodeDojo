@@ -17,6 +17,7 @@ func TestRenderReviewerSystemPrompt(t *testing.T) {
 		"Level":      "pointer",
 		"Strict":     true,
 		"Context":    "one failing test",
+		"Language":   "Go",
 	})
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)

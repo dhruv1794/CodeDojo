@@ -9,6 +9,7 @@ import (
 
 	"github.com/dhruvmishra/codedojo/internal/coach"
 	"github.com/dhruvmishra/codedojo/internal/coach/prompts"
+	"github.com/dhruvmishra/codedojo/internal/coach/validator"
 	"github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate"
 	"github.com/dhruvmishra/codedojo/internal/session"
 )
@@ -117,6 +118,16 @@ func gradeDiagnosis(ctx context.Context, submission Submission, log mutate.Mutat
 	})
 	if err != nil {
 		return coach.Grade{}, fmt.Errorf("grade reviewer diagnosis: %w", err)
+	}
+	banned := []string{
+		log.Mutation.Operator,
+		log.Mutation.Original,
+		log.Mutation.Mutated,
+	}
+	if grade.Feedback != "" {
+		if r := validator.Validate(grade.Feedback, banned); !r.OK {
+			return coach.Grade{}, fmt.Errorf("diagnosis feedback failed validator: %s", r.Reason)
+		}
 	}
 	return grade, nil
 }

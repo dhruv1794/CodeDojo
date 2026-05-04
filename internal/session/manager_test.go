@@ -58,7 +58,7 @@ func TestManagerHappyPath(t *testing.T) {
 		t.Fatalf("go test failed\nstdout:\n%s\nstderr:\n%s", result.Stdout, result.Stderr)
 	}
 
-	hint, err := manager.RequestHint(ctx, "sess-happy", coach.LevelPointer, "failing edge case")
+	hint, err := manager.RequestHint(ctx, "sess-happy", coach.LevelPointer, "failing edge case", "Go", 3, 3)
 	if err != nil {
 		t.Fatalf("RequestHint() error = %v", err)
 	}

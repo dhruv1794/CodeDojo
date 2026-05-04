@@ -52,8 +52,15 @@ func (m Manager) New(ctx context.Context, sess Session, spec sandbox.Spec) (sand
 	return box, nil
 }
 
-func (m Manager) RequestHint(ctx context.Context, sessionID string, level coach.HintLevel, text string) (coach.Hint, error) {
-	hint, err := m.Coach.Hint(ctx, coach.HintRequest{SessionID: sessionID, Level: level, Context: text})
+func (m Manager) RequestHint(ctx context.Context, sessionID string, level coach.HintLevel, text, language string, difficulty, hintBudget int) (coach.Hint, error) {
+	hint, err := m.Coach.Hint(ctx, coach.HintRequest{
+		SessionID:  sessionID,
+		Level:      level,
+		Context:    text,
+		Language:   language,
+		Difficulty: difficulty,
+		HintBudget: hintBudget,
+	})
 	if err != nil {
 		return coach.Hint{}, err
 	}

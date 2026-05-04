@@ -162,6 +162,24 @@ func TestGradeReturnsDiagnosisError(t *testing.T) {
 	}
 }
 
+func TestGradeRejectsDiagnosisFeedbackWithBannedIdentifiers(t *testing.T) {
+	log := reviewerLog()
+	banned := log.Mutation.Operator
+
+	_, err := Grade(context.Background(), Submission{
+		FilePath:      "calc/calc.go",
+		StartLine:     10,
+		OperatorClass: "boundary",
+		Diagnosis:     "The boundary was widened.",
+	}, log, GradeOptions{Coach: scriptedGrader{score: 40, feedback: "The operator " + banned + " was used to change the comparison."}})
+	if err == nil {
+		t.Fatalf("expected error for feedback containing banned identifier %q", banned)
+	}
+	if !strings.Contains(err.Error(), "banned identifier") {
+		t.Fatalf("error %q does not mention banned identifier", err)
+	}
+}
+
 func TestGradeBuildsDiagnosisRubric(t *testing.T) {
 	grader := &capturingGrader{score: 37}
 	got, err := Grade(context.Background(), Submission{
@@ -202,8 +220,9 @@ func reviewerLog() mutate.MutationLog {
 }
 
 type scriptedGrader struct {
-	score int
-	err   error
+	score    int
+	err      error
+	feedback string
 }
 
 func (g scriptedGrader) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
@@ -217,7 +236,11 @@ func (g scriptedGrader) Grade(ctx context.Context, req coach.GradeRequest) (coac
 	if req.Answer == "" {
 		return coach.Grade{Score: 0, Feedback: "No diagnosis was provided."}, nil
 	}
-	return coach.Grade{Score: g.score, Feedback: "feedback"}, nil
+	fb := g.feedback
+	if fb == "" {
+		fb = "feedback"
+	}
+	return coach.Grade{Score: g.score, Feedback: fb}, nil
 }
 
 type capturingGrader struct {

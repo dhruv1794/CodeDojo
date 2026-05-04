@@ -50,6 +50,7 @@ type LiveSession struct {
 	HintBudget int          `json:"hint_budget"`
 	HintsUsed  int          `json:"hints_used"`
 	Streak     int          `json:"streak"`
+	Language   string       `json:"language"`
 	StartedAt  time.Time    `json:"started_at"`
 	Done       bool         `json:"done"`
 
@@ -299,6 +300,7 @@ func (s *Service) StartReview(ctx context.Context, opts StartOptions) (*LiveSess
 	if err != nil {
 		return nil, err
 	}
+	live.Language = lang.Name
 	live.reviewTask = &task
 	live.TaskFiles = reviewTaskFiles(ctx, loaded.Path)
 	if err := s.store.SaveMutationLog(ctx, live.ID, task.MutationLog); err != nil {
@@ -314,7 +316,8 @@ func (s *Service) StartLearn(ctx context.Context, opts StartOptions) (*LiveSessi
 	if err != nil {
 		return nil, err
 	}
-	task, err := newcomer.GenerateTask(ctx, loaded, opts.Difficulty)
+	gen := newcomer.TaskGenerator{Summarizer: s.newcomerSummarizer()}
+	task, err := gen.GenerateTask(ctx, loaded, opts.Difficulty)
 	if err != nil {
 		return nil, err
 	}
@@ -333,6 +336,7 @@ func (s *Service) StartLearn(ctx context.Context, opts StartOptions) (*LiveSessi
 	if err != nil {
 		return nil, err
 	}
+	live.Language = lang.Name
 	live.learnTask = &task
 	live.TaskFiles = learnTaskFiles(task.SuggestedFiles)
 	return live, nil
@@ -495,7 +499,7 @@ func (s *Service) Hint(ctx context.Context, id string, level coach.HintLevel) (H
 	if live.HintsUsed >= live.HintBudget {
 		return HintResult{}, fmt.Errorf("hint budget exhausted")
 	}
-	hint, err := live.manager.RequestHint(ctx, id, level, live.Task)
+	hint, err := live.manager.RequestHint(ctx, id, level, live.Task, live.Language, live.Difficulty, live.HintBudget)
 	if err != nil {
 		return HintResult{}, err
 	}
@@ -700,6 +704,19 @@ func buildCoach(cfg config.Config, banned []string) (coach.Coach, error) {
 		return nil, err
 	}
 	return coach.RetryWithStricterPrompt(inner, banned), nil
+}
+
+func (s *Service) newcomerSummarizer() newcomer.Summarizer {
+	switch s.cfg.Coach.Backend {
+	case "", "mock":
+		return nil
+	default:
+		inner, err := newBackendCoach(s.cfg)
+		if err != nil {
+			return nil
+		}
+		return newcomer.AISummarizer{Coach: inner}
+	}
 }
 
 func newBackendCoach(cfg config.Config) (coach.Coach, error) {

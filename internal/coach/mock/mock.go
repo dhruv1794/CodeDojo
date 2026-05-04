@@ -14,11 +14,12 @@ type Coach struct {
 
 func (c Coach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
 	if _, err := prompts.Render("reviewer/system.tmpl", map[string]any{
-		"Difficulty": 0,
-		"HintBudget": 0,
+		"Difficulty": req.Difficulty,
+		"HintBudget": req.HintBudget,
 		"Level":      hintLevelName(req.Level),
 		"Strict":     req.Strict,
 		"Context":    req.Context,
+		"Language":   req.Language,
 	}); err != nil {
 		return coach.Hint{}, fmt.Errorf("render reviewer hint prompt: %w", err)
 	}
