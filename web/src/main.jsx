@@ -3,6 +3,18 @@ import { createRoot } from "react-dom/client";
 import Editor from "@monaco-editor/react";
 import "./styles.css";
 
+const BELTS = [
+  { name: "white", label: "White", css: "var(--belt-white)" },
+  { name: "yellow", label: "Yellow", css: "var(--belt-yellow)" },
+  { name: "green", label: "Green", css: "var(--belt-green)" },
+  { name: "brown", label: "Brown", css: "var(--belt-brown)" },
+  { name: "black", label: "Black", css: "var(--belt-black)" },
+];
+
+function beltForDifficulty(d) {
+  return BELTS[Math.max(0, Math.min(d || 1, 5) - 1)];
+}
+
 const initialWorkflow = {
   newcomer: [
     ["understand", "Understand the task"],
@@ -13,6 +25,7 @@ const initialWorkflow = {
     ["submit", "Submit implementation"],
   ],
   reviewer: [
+    ["forecast", "Predict bug location"],
     ["tests", "Run tests"],
     ["inspect", "Inspect suspicious files"],
     ["location", "Select bug location"],
@@ -22,7 +35,8 @@ const initialWorkflow = {
 };
 
 const nextActionText = {
-  understand: "Read the task brief, then inspect the files.",
+  forecast: "Before running tests, predict which file the bug is in.",
+  understand: "Read the kata brief, then inspect the files.",
   inspect: "Open a file that looks relevant.",
   implement: "Edit the practice copy, then save your changes.",
   tests: "Run the test suite to get a signal.",
@@ -120,7 +134,14 @@ function App() {
   const [reviewDiagnosis, setReviewDiagnosis] = useState("");
   const [result, setResult] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [forecastFile, setForecastFile] = useState("");
+  const [wrongFirstMode, setWrongFirstMode] = useState(false);
+  const [hintWallet, setHintWallet] = useState(0);
+  const [coachMessage, setCoachMessage] = useState("");
   const editorRef = useRef(null);
+  const [beltPromotion, setBeltPromotion] = useState(null);
+  const [mistakeIndex, setMistakeIndex] = useState(null);
+  const [kataHistory, setKataHistory] = useState(null);
 
   const sessionMode = session?.mode || "";
   const checklist = initialWorkflow[sessionMode] || [];
@@ -225,6 +246,10 @@ function App() {
         result: "No result yet.",
       });
       setResult(null);
+      setForecastFile("");
+      setCoachMessage("");
+      setBeltPromotion(null);
+      setMistakeIndex(null);
       await loadFiles(data.id);
     } catch (err) {
       setPreflightError(err);
@@ -269,7 +294,8 @@ function App() {
     setBusy("tests");
     setActivePanel("tests");
     try {
-      const data = await api(`/api/sessions/${session.id}/tests`, { method: "POST" });
+      const body = forecastFile ? JSON.stringify({ forecast_file: forecastFile }) : "{}";
+      const data = await api(`/api/sessions/${session.id}/tests`, { method: "POST", body });
       const text = `${data.stdout || ""}${data.stderr || ""}\nexit code: ${data.exit_code}`;
       setOutputs((current) => ({ ...current, tests: text.trim() }));
       setErrors((current) => ({ ...current, tests: null }));
@@ -309,9 +335,15 @@ function App() {
       });
       setOutputs((current) => ({
         ...current,
-        hints: current.hints === "No hints used yet." ? data.hint : `${current.hints}\n\n${data.hint}`,
+        hints: current.hints === "No hints used yet."
+          ? `[Jin] ${data.hint}`
+          : `${current.hints}\n\n[Jin] ${data.hint}`,
       }));
+      setCoachMessage(data.hint || "");
       setErrors((current) => ({ ...current, hints: null }));
+      if (data.cost != null) {
+        setHintWallet((w) => w - data.cost);
+      }
     } catch (err) {
       setErrors((current) => ({ ...current, hints: err }));
     } finally {
@@ -332,8 +364,9 @@ function App() {
               end_line: Number(selectedEnd || selectedStart || 1),
               operator_class: reviewOperator,
               diagnosis: reviewDiagnosis,
+              forecast_file: forecastFile,
             }
-          : {};
+          : { forecast_file: forecastFile };
       const data = await api(`/api/sessions/${session.id}/submit`, {
         method: "POST",
         body: JSON.stringify(body),
@@ -341,6 +374,8 @@ function App() {
       setResult(data);
       setOutputs((current) => ({ ...current, result: renderResultText(data) }));
       markStep("submit");
+      if (data.mistake_index) setMistakeIndex(data.mistake_index);
+      if (data.promotion) setBeltPromotion(data.promotion);
     } catch (err) {
       setErrors((current) => ({ ...current, result: err }));
     } finally {
@@ -372,21 +407,41 @@ function App() {
     setReviewDiagnosis("");
     setReviewOperator("");
     setWorkflow({});
+    setForecastFile("");
+    setCoachMessage("");
+    setBeltPromotion(null);
+    setMistakeIndex(null);
+    setWrongFirstMode(false);
   }
 
   const suggestedFiles = session?.task_files || [];
   const next = checklist.find(([key]) => !workflow[key]);
   const modeLabel = session?.mode === "newcomer" ? "Learn" : "Review";
+  const currentBelt = beltForDifficulty(session?.difficulty || difficulty);
+
+  useEffect(() => {
+    fetchKataHistory();
+  }, [session]);
+
+  async function fetchKataHistory() {
+    try {
+      const data = await api("/api/sessions");
+      setKataHistory(data.sessions || []);
+    } catch {
+      // history fetch is non-critical
+    }
+  }
 
   return (
     <main className="app">
+      {beltPromotion && <div className="belt-promotion">{beltPromotion}</div>}
       {!session && (
         <section className="setup" id="setup">
           <div className="setup-hero">
             <div>
               <p className="eyebrow">CodeDojo local</p>
               <h1>Practice on a real repository</h1>
-              <p className="hero-copy">Run a focused Learn or Review session against a local practice copy, with tests, hints, and grading in one workspace.</p>
+              <p className="hero-copy">Run a focused Learn or Review kata against a local practice copy, with tests, hints, and grading in one workspace.</p>
             </div>
             <div className="hero-signal" aria-hidden="true">
               <div className="signal-row">
@@ -395,7 +450,7 @@ function App() {
               </div>
               <div className="signal-row">
                 <span>practice loop</span>
-                <strong>inspect -&gt; test -&gt; submit</strong>
+                <strong>inspect → test → submit</strong>
               </div>
               <div className="signal-bars">
                 <span></span>
@@ -422,17 +477,47 @@ function App() {
             <div className="setup-options">
               <label>
                 Difficulty
-                <input id="difficulty" name="difficulty" type="number" min="1" max="5" value={difficulty} onChange={(event) => setDifficulty(event.target.value)} />
+                <div className="difficulty-belt" role="radiogroup" aria-label="Belt difficulty">
+                  {BELTS.map((belt, i) => (
+                    <button key={belt.name} type="button" data-belt={belt.name} aria-pressed={difficulty === i + 1} onClick={() => setDifficulty(i + 1)}>
+                      {belt.label}
+                    </button>
+                  ))}
+                </div>
               </label>
               <label>
                 Hints
                 <input id="hint-budget" name="hint-budget" type="number" min="0" max="10" value={hintBudget} onChange={(event) => setHintBudget(event.target.value)} />
               </label>
             </div>
+            {mode === "review" && (
+              <div className="setup-options">
+                <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={wrongFirstMode} onChange={(e) => setWrongFirstMode(e.target.checked)} style={{ width: "auto" }} />
+                  <span>Wrong-First Mode — predict the bug before opening source files</span>
+                </label>
+              </div>
+            )}
             <button id="start-button" type="submit" disabled={!canStart}>
-              {busy === "start" ? "Starting..." : "Start session"}
+              {busy === "start" ? "Starting..." : "Start kata"}
             </button>
           </form>
+
+          {kataHistory && kataHistory.length > 0 && (
+            <section className="panel kata-library" style={{ marginTop: "24px", padding: "16px" }}>
+              <h3 style={{ margin: "0 0 12px", fontSize: "18px" }}>Your Kata Scroll</h3>
+              <div className="timeline-scroll">
+                {kataHistory.slice(0, 10).map((entry) => (
+                  <div key={entry.id} className={`timeline-entry ${entry.score > 0 ? "scored" : entry.state === "graded" ? "failed" : ""}`}>
+                    <div className="entry-date">{new Date(entry.started_at).toLocaleDateString()}</div>
+                    <div className="entry-type">{entry.mode} — {entry.task?.slice(0, 60)}{entry.task?.length > 60 ? "..." : ""}</div>
+                    {entry.score > 0 && <div className="entry-score">Score: {entry.score}</div>}
+                    {entry.operator && <div className="entry-verdict">{entry.operator}</div>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </section>
       )}
 
@@ -444,9 +529,12 @@ function App() {
               <h2 id="task-title">{session.task}</h2>
             </div>
             <div className="stats">
-              <span id="difficulty-label">D{session.difficulty}</span>
+              <span className="belt-pill" data-belt={currentBelt.name}>
+                <span className="belt-icon"></span>
+                {currentBelt.label}
+              </span>
               <span id="streak-label">Streak {session.streak}</span>
-              <span id="hint-label">Hint budget {session.hints_used}/{session.hint_budget}</span>
+              <span id="hint-label">Hints {session.hints_used}/{session.hint_budget}</span>
               <span id="timer-label">{formatElapsed(session.started_at, now)}</span>
               <span id="progress-label">{checklist.length ? `${doneSteps}/${checklist.length} steps` : "0/0 steps"}</span>
             </div>
@@ -460,37 +548,66 @@ function App() {
                   {checklist.map(([key, label]) => <li key={key} className={workflow[key] ? "done" : ""}>{label}</li>)}
                 </ol>
                 <div id="next-action" className="next-action">
-                  {next ? <><strong>Next</strong><span>{nextActionText[next[0]]}</span></> : "Session workflow complete."}
+                  {next ? <><strong>Next</strong><span>{nextActionText[next[0]]}</span></> : "Kata workflow complete."}
                 </div>
                 <div className="suggested">
                   <strong id="suggested-title">Suggested files</strong>
                   <div id="suggested-files" className={`suggested-files ${suggestedFiles.length ? "" : "empty-state"}`}>
                     {suggestedFiles.length ? suggestedFiles.map((file) => (
-                      <button key={file.path} className="suggested-file" type="button" onClick={() => openFile(file.path)}>
+                      <button key={file.path} className="suggested-file" type="button" disabled={wrongFirstMode && !workflow.tests} onClick={() => openFile(file.path)}>
                         <strong>{file.path}</strong>
                         <span>{file.reason}</span>
                       </button>
-                    )) : "Start a session to see suggested files."}
+                    )) : "Start a kata to see suggested files."}
                   </div>
                 </div>
               </section>
 
+              {session?.mode === "reviewer" && (
+                <section className="panel forecast">
+                  <div className="forecast-section">
+                    <h4>Forecast</h4>
+                    <p style={{ color: "var(--muted)", fontSize: "13px", margin: 0 }}>{forecastFile ? `Predicted: ${forecastFile}` : "Where is the bug? Pick a file before running tests."}</p>
+                    <div className="forecast-options">
+                      {files.filter((f) => !f.dir).slice(0, 20).map((file) => (
+                        <button key={file.path} type="button" className={`forecast-option ${forecastFile === file.path ? "selected" : ""}`} onClick={() => { setForecastFile(file.path); markStep("forecast"); }}>
+                          {file.path}
+                        </button>
+                      ))}
+                      {forecastFile && (
+                        <button type="button" className="forecast-option" onClick={() => { setForecastFile(""); markStep("forecast", false); }}>No guess yet</button>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              )}
+
               <section className="panel files">
                 <div className="panel-head">
                   <strong>Files</strong>
-                  <button id="refresh-files" type="button" onClick={() => loadFiles()} disabled={Boolean(busy)}>Refresh</button>
+                  <button id="refresh-files" type="button" onClick={() => loadFiles()} disabled={Boolean(busy) || (wrongFirstMode && !workflow.tests)}>Refresh</button>
                 </div>
                 <div id="file-list" className={`file-list ${files.length ? "" : "empty-state"}`}>
                   {files.length ? files.filter((file) => !file.dir).map((file) => (
-                    <button key={file.path} type="button" className={`file ${activeFile === file.path ? "active" : ""}`} onClick={() => openFile(file.path)}>
+                    <button key={file.path} type="button" className={`file ${activeFile === file.path ? "active" : ""}`} onClick={() => openFile(file.path)} disabled={wrongFirstMode && !workflow.tests}>
                       {file.path}
                     </button>
-                  )) : "Start a session to load files."}
+                  )) : "Start a kata to load files."}
                 </div>
               </section>
             </aside>
 
             <section className="panel editor">
+              {wrongFirstMode && !workflow.tests && (
+                <div className="wrong-first-lock fade-slide-up">
+                  <h4>Wrong-First Mode</h4>
+                  <p>You cannot open source files yet. Study the failing test output and predict the bug first. Run the tests above, then write your blind diagnosis below before unlocking the files.</p>
+                  <div>
+                    <textarea style={{ minHeight: "80px", marginBottom: "8px" }} placeholder="Blind diagnosis: what do you think the bug is?" value={reviewDiagnosis} onChange={(event) => { setReviewDiagnosis(event.target.value); if (event.target.value.trim()) markStep("diagnosis"); }}></textarea>
+                    <button type="button" className="primary" onClick={() => markStep("tests")} disabled={!reviewDiagnosis.trim()}>I've written my blind diagnosis — unlock files</button>
+                  </div>
+                </div>
+              )}
               <div className="panel-head">
                 <strong id="active-file">{activeFile || "No file selected"}</strong>
                 <button id="save-file" type="button" onClick={saveFile} disabled={Boolean(busy) || !activeFile}>Save</button>
@@ -520,17 +637,23 @@ function App() {
             <aside className="panel tools">
               <Tabs active={activePanel} setActive={setActivePanel} />
               <ToolPanel name="tests" active={activePanel} title="Tests" help="Run the repository checks inside the practice copy." action="Run tests" onAction={runTests} output={outputs.tests} error={errors.tests} busy={busy} />
-              <ToolPanel name="diff" active={activePanel} title={session.mode === "newcomer" ? "Practice copy diff" : "Hidden bug diff"} help="Review the practice copy before submitting." action="Show diff" onAction={showDiff} output={outputs.diff} error={errors.diff} busy={busy} />
+              {!wrongFirstMode || workflow.tests ? (
+                <ToolPanel name="diff" active={activePanel} title={session.mode === "newcomer" ? "Practice copy diff" : "Hidden bug diff"} help="Review the practice copy before submitting." action="Show diff" onAction={showDiff} output={outputs.diff} error={errors.diff} busy={busy} />
+              ) : null}
               <section id="panel-hints" className={`tab-panel ${activePanel === "hints" ? "" : "hidden"}`} role="tabpanel" aria-labelledby="tab-hints">
                 <div className="tool-head">
-                  <div><h3>Hints</h3><p id="hint-help">Spend from the hint budget when you want a nudge.</p></div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div className="coach-avatar" title="Jin — your coach">墨</div>
+                    <div><h3>Hints</h3><p id="hint-help">Jin is your coach. Spend from the hint budget when you want guidance.</p></div>
+                  </div>
                 </div>
+                {coachMessage && <div className="submission-summary coach-speak" style={{ borderColor: "var(--accent)" }}><em>"</em>{coachMessage}<em>"</em></div>}
                 <div className="hint-actions">
                   <select id="hint-level" value={hintLevel} onChange={(event) => setHintLevel(event.target.value)}>
-                    <option value="nudge">Nudge</option>
-                    <option value="question">Question</option>
-                    <option value="pointer">Pointer</option>
-                    <option value="concept">Concept</option>
+                    <option value="nudge">Nudge (cost: 1)</option>
+                    <option value="question">Question (cost: 2)</option>
+                    <option value="pointer">Pointer (cost: 4)</option>
+                    <option value="concept">Concept (cost: 8)</option>
                   </select>
                   <button id="ask-hint" type="button" onClick={askHint} disabled={Boolean(busy)}>Ask</button>
                 </div>
@@ -554,15 +677,29 @@ function App() {
                 latestDiff={latestDiff}
                 onSubmit={submit}
                 busy={busy}
+                forecastFile={forecastFile}
               />
               <section id="panel-result" className={`tab-panel result-panel ${activePanel === "result" ? "" : "hidden"}`} role="tabpanel" aria-labelledby="tab-result">
                 <h3>Result</h3>
                 <div id="result-summary" className={`result-summary ${result ? "" : "empty-state"}`}>
-                  {result ? `Final score: ${result.score}` : "Submit a session to see your score, feedback, and reveal."}
+                  {result ? `Final score: ${result.score}` : "Submit a kata to see your score, feedback, and reveal."}
                 </div>
                 <ResultDetails result={result} />
                 <Output id="result-output" text={outputs.result} error={errors.result} />
-                <button id="start-another" type="button" onClick={startAnother}>Start another session</button>
+                {mistakeIndex && (
+                  <div className="mistake-index fade-slide-up">
+                    <h3>Your Mistake Index</h3>
+                    {mistakeIndex.map((row) => (
+                      <div key={row.operator} className="mistake-row">
+                        <span className="op-name">{row.operator}</span>
+                        <span className={`op-rate ${row.solve_rate < 0.5 ? "weak" : ""}`}>{Math.round(row.solve_rate * 100)}%</span>
+                        <span className="op-time">{row.avg_minutes}m avg</span>
+                        <span className="op-recommend">{row.recommended ? "← practice" : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <button id="start-another" type="button" className="primary" onClick={startAnother}>Start another kata</button>
               </section>
             </aside>
           </div>
@@ -593,9 +730,9 @@ function ModeCard({ name, selected, availability, recommended, language, onSelec
         <strong>{review ? "Review" : "Learn"}</strong>
         <span id={`${name}-badge`} className={`mode-badge ${recommended ? "" : "hidden"}`}>Recommended</span>
       </span>
-      <span className="mode-summary">{review ? "For developers training AI-code review instincts." : "For developers learning a codebase through active recall."}</span>
-      <span className="mode-detail">{review ? "Find the hidden bug, select its location, and explain the diagnosis." : "Rebuild a real historical change, run tests, and submit the implementation."}</span>
-      <span id={`${name}-language`} className="mode-meta">{review ? "5-15 minutes" : "15-45 minutes"} · {language || "supported repositories"}</span>
+      <span className="mode-summary">{review ? "Find a hidden bug in the codebase." : "Rebuild a real historical change."}</span>
+      <span className="mode-detail">{review ? "Locate the mutation, explain the diagnosis, and submit for grading." : "Implement the feature, run tests, and submit your implementation."}</span>
+      <span className="mode-meta">{review ? "5-15 minutes" : "15-45 minutes"} · {language || "supported repositories"}</span>
       <span id={`${name}-status`} className="mode-status">{availabilityText(review ? "Review" : "Learn", availability)}</span>
     </button>
   );
@@ -651,13 +788,14 @@ function LineNumbers({ content, selectedStart, selectedEnd, onSelect }) {
 function SubmitPanel(props) {
   const {
     active, session, activeFile, selectedFile, selectedStart, selectedEnd, setSelectedFile, setSelectedStart, setSelectedEnd,
-    reviewOperator, setReviewOperator, reviewDiagnosis, setReviewDiagnosis, latestTestExit, latestDiff, onSubmit, busy,
+    reviewOperator, setReviewOperator, reviewDiagnosis, setReviewDiagnosis, latestTestExit, latestDiff, onSubmit, busy, forecastFile,
   } = props;
   return (
     <section id="panel-submit" className={`tab-panel submit ${active ? "" : "hidden"}`} role="tabpanel" aria-labelledby="tab-submit">
       <div id="review-submit" className={`review-submit ${session.mode === "reviewer" ? "" : "hidden"}`}>
         <h3>Hidden bug submission</h3>
         <p>Select the hidden bug location in the gutter, confirm the file/range, and explain what is wrong.</p>
+        {forecastFile && <div className="submission-summary"><strong>Forecast:</strong> <span>{forecastFile}</span></div>}
         <div id="review-selection-summary" className={`submission-summary ${selectedFile ? "" : "empty-state"}`}>
           {selectedFile ? `${selectedFile}:${selectedStart || 1}-${selectedEnd || selectedStart || 1}` : "No hidden bug location selected yet."}
         </div>
@@ -676,6 +814,7 @@ function SubmitPanel(props) {
       <div id="learn-submit" className={`learn-submit ${session.mode === "newcomer" ? "" : "hidden"}`}>
         <h3>Reference solution submission</h3>
         <p>Submit your implementation after tests and diff review. The reference solution is revealed after grading.</p>
+        {forecastFile && <div className="submission-summary"><strong>Forecast:</strong> <span>{forecastFile}</span></div>}
         <ul id="learn-presubmit" className="presubmit-checklist">
           <li className={latestTestExit !== null ? "done" : ""}>Tests run{latestTestExit !== null ? `, latest exit code ${latestTestExit}` : ""}</li>
           <li className={latestDiff ? "done" : ""}>Diff reviewed</li>
@@ -687,11 +826,50 @@ function SubmitPanel(props) {
   );
 }
 
+function ScoreCard({ result }) {
+  if (!result) return null;
+  const breakdown = result.breakdown || {};
+  const entries = Object.entries(breakdown);
+  const maxVal = Math.max(1, ...entries.map(([, v]) => Math.abs(v)));
+  const verdict =
+    result.score >= 90 ? "perfect" :
+    result.score >= 60 ? "good" :
+    "partial";
+  const verdictLabel =
+    result.score >= 90 ? "Exceptional" :
+    result.score >= 60 ? "Solid work" :
+    "Keep practicing";
+  return (
+    <div className="score-card fade-slide-up">
+      <div className={`score-verdict ${verdict}`}>{verdictLabel}</div>
+      <ul className="score-bar-list">
+        {entries.map(([key, value]) => (
+          <li key={key} className="score-bar-item">
+            <span className="bar-label">{key}</span>
+            <div className="bar-track"><div className="bar-fill ink-reveal" style={{ width: `${(Math.abs(value) / maxVal) * 100}%` }}></div></div>
+            <span className="bar-value">{value > 0 ? `+${value}` : value}</span>
+          </li>
+        ))}
+      </ul>
+      {result.score >= 90 && <div className="score-stamp">Clean win</div>}
+      {result.current_streak > 1 && <div style={{ fontSize: "13px", color: "var(--muted)" }}>Streak: {result.current_streak}</div>}
+    </div>
+  );
+}
+
 function ResultDetails({ result }) {
   if (!result) return <div id="result-details" className="result-details"></div>;
   return (
     <div id="result-details" className="result-details">
-      {Object.entries(result.breakdown || {}).map(([key, value]) => <span key={key}>{key}: {value}</span>)}
+      <ScoreCard result={result} />
+      {Object.entries(result.reveal || {}).length > 0 && (
+        <div className="result-card ink-bleed">
+          <h4>Reveal</h4>
+          {Object.entries(result.reveal).map(([key, value]) => (
+            <p key={key}><strong>{key}:</strong> {value}</p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

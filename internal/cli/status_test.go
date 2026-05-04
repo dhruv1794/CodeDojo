@@ -44,7 +44,7 @@ func TestRunStatsPrintsAggregates(t *testing.T) {
 		t.Fatalf("runStats() error = %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{"Sessions: 2 total", "Streak: current 1, best 1", "By mode:", "By repo:", "By operator:", "boundary"} {
+	for _, want := range []string{"Katas: 2 total", "Streak: current 1, best 1", "By mode:", "By repo:", "Mistake Index:", "boundary"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stats output missing %q:\n%s", want, got)
 		}

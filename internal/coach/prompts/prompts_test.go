@@ -22,7 +22,7 @@ func TestRenderReviewerSystemPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
-	for _, want := range []string{"CodeDojo reviewer coach", "Difficulty: 3", "Strict: true", "one failing test"} {
+	for _, want := range []string{"CodeDojo coach", "Difficulty: 3", "Strict: true", "one failing test"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("rendered prompt %q does not contain %q", got, want)
 		}

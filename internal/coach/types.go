@@ -45,11 +45,13 @@ type Coach interface {
 
 func HintCost(level HintLevel) int {
 	switch level {
+	case LevelQuestion:
+		return 2
 	case LevelPointer:
-		return 20
+		return 4
 	case LevelConcept:
-		return 30
+		return 8
 	default:
-		return 10
+		return 1
 	}
 }

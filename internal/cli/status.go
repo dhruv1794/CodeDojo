@@ -45,7 +45,7 @@ func runStatus(ctx context.Context, cmd *cobra.Command, limit int) error {
 		_, err := fmt.Fprintln(out, ui.Muted("No sessions yet."))
 		return err
 	}
-	if _, err := fmt.Fprintf(out, "%s\nSTARTED              MODE      SCORE  STATE   HINTS  REPO\n", ui.Banner("Session history")); err != nil {
+	if _, err := fmt.Fprintf(out, "%s\nSTARTED              MODE      SCORE  STATE   HINTS  REPO\n", ui.Banner("Kata history")); err != nil {
 		return err
 	}
 	for i, sess := range sessions {

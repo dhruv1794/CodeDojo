@@ -117,3 +117,39 @@ func (s *Store) groupStats(ctx context.Context, query string) ([]GroupStat, erro
 	}
 	return out, nil
 }
+
+type OpBreakdown struct {
+	Operator  string
+	Count     int
+	SolveRate float64
+}
+
+func (s *Store) OpBreakdown(ctx context.Context) ([]OpBreakdown, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.operator, COUNT(*), COALESCE(SUM(CASE WHEN s.score > 0 THEN 1 ELSE 0 END), 0)
+		FROM mutation_logs m
+		LEFT JOIN sessions s ON s.id = m.session_id
+		GROUP BY m.operator
+		ORDER BY COUNT(*) DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query op breakdown: %w", err)
+	}
+	defer rows.Close()
+	var out []OpBreakdown
+	for rows.Next() {
+		var ob OpBreakdown
+		var successes int
+		if err := rows.Scan(&ob.Operator, &ob.Count, &successes); err != nil {
+			return nil, fmt.Errorf("scan op breakdown: %w", err)
+		}
+		if ob.Count > 0 {
+			ob.SolveRate = float64(successes) / float64(ob.Count)
+		}
+		out = append(out, ob)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate op breakdown: %w", err)
+	}
+	return out, nil
+}

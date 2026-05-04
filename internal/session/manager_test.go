@@ -62,7 +62,7 @@ func TestManagerHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RequestHint() error = %v", err)
 	}
-	if hint.Level != coach.LevelPointer || hint.Content == "" || hint.Cost != 20 {
+	if hint.Level != coach.LevelPointer || hint.Content == "" || hint.Cost != 4 {
 		t.Fatalf("RequestHint() = %+v, want pointer hint with content and cost", hint)
 	}
 

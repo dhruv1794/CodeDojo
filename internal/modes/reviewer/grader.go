@@ -19,6 +19,7 @@ const (
 	lineScore       = 30
 	operatorScore   = 20
 	maxDiagnosis    = 50
+	forecastScore   = 15
 	defaultTimeGoal = 15 * time.Minute
 )
 
@@ -28,16 +29,12 @@ type Submission struct {
 	EndLine       int
 	OperatorClass string
 	Diagnosis     string
+	ForecastFile  string
 	HintCosts     []int
 	StartedAt     time.Time
 	SubmittedAt   time.Time
 	Streak        int
 	SessionID     string
-}
-
-type GradeOptions struct {
-	Coach          coach.Coach
-	TimeBonusLimit time.Duration
 }
 
 type GradeResult struct {
@@ -47,11 +44,17 @@ type GradeResult struct {
 	LineScore      int
 	OperatorScore  int
 	DiagnosisScore int
+	ForecastScore  int
 	HintDeduction  int
 	TimeBonus      int
 	StreakBonus    int
 
 	DiagnosisFeedback string
+}
+
+type GradeOptions struct {
+	Coach          coach.Coach
+	TimeBonusLimit time.Duration
 }
 
 func Grade(ctx context.Context, submission Submission, log mutate.MutationLog, opts GradeOptions) (GradeResult, error) {
@@ -64,6 +67,10 @@ func Grade(ctx context.Context, submission Submission, log mutate.MutationLog, o
 	}
 	if sameOperator(submission.OperatorClass, log.Mutation.Operator) {
 		result.OperatorScore = operatorScore
+	}
+
+	if samePath(submission.ForecastFile, log.Mutation.FilePath) {
+		result.ForecastScore = forecastScore
 	}
 
 	diagnosis, err := gradeDiagnosis(ctx, submission, log, opts.Coach)
@@ -86,7 +93,7 @@ func Grade(ctx context.Context, submission Submission, log mutate.MutationLog, o
 		result.TimeBonus = session.TimeBonus(submission.SubmittedAt.Sub(submission.StartedAt), limit)
 	}
 
-	base := result.FileScore + result.LineScore + result.OperatorScore + result.DiagnosisScore - result.HintDeduction + result.TimeBonus
+	base := result.FileScore + result.LineScore + result.OperatorScore + result.DiagnosisScore + result.ForecastScore - result.HintDeduction + result.TimeBonus
 	if base < 0 {
 		base = 0
 	}

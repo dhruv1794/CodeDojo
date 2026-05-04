@@ -30,10 +30,10 @@ func runStats(ctx context.Context, cmd *cobra.Command) error {
 	}
 	out := cmd.OutOrStdout()
 	ui := themeFor(cmd)
-	if _, err := fmt.Fprintf(out, "%s\n", ui.Banner("Practice stats")); err != nil {
+	if _, err := fmt.Fprintf(out, "%s\n", ui.Banner("Dojo stats")); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(out, "Sessions: %d total, %d scored, avg %.1f, best %d\n", stats.Total, stats.Graded, stats.Average, stats.Best); err != nil {
+	if _, err := fmt.Fprintf(out, "Katas: %d total, %d scored, avg %.1f, best %d\n", stats.Total, stats.Graded, stats.Average, stats.Best); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(out, "Streak: current %d, best %d\n", stats.Streak.Current, stats.Streak.Best); err != nil {
@@ -45,7 +45,7 @@ func runStats(ctx context.Context, cmd *cobra.Command) error {
 	if err := printGroupStats(out, ui, "By repo", stats.ByRepo); err != nil {
 		return err
 	}
-	return printGroupStats(out, ui, "By operator", stats.ByOp)
+	return printGroupStats(out, ui, "Mistake Index", stats.ByOp)
 }
 
 type statWriter interface {
