@@ -116,6 +116,7 @@ type ReviewSubmission struct {
 	EndLine       int    `json:"end_line"`
 	OperatorClass string `json:"operator_class"`
 	Diagnosis     string `json:"diagnosis"`
+	ForecastFile  string `json:"forecast_file,omitempty"`
 }
 
 type Result struct {
@@ -125,6 +126,16 @@ type Result struct {
 	CurrentStreak int               `json:"current_streak"`
 	TestExitCode  int               `json:"test_exit_code,omitempty"`
 	Reveal        map[string]string `json:"reveal,omitempty"`
+	MistakeIndex  []OpStat          `json:"mistake_index,omitempty"`
+	Promotion     string            `json:"promotion,omitempty"`
+}
+
+type OpStat struct {
+	Operator    string  `json:"operator"`
+	Count       int     `json:"count"`
+	SolveRate   float64 `json:"solve_rate"`
+	AvgMinutes  float64 `json:"avg_minutes"`
+	Recommended bool    `json:"recommended"`
 }
 
 func NewService(ctx context.Context, cfg config.Config, driver sandbox.Driver, spec SpecBuilder) (*Service, error) {
@@ -543,6 +554,8 @@ func (s *Service) SubmitLearn(ctx context.Context, id string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	mistakeIdx := s.mistakeIndex(ctx)
+	promotion := s.beltPromotion(live.Difficulty, grade.Score, streak)
 	return Result{
 		Score:         grade.Score,
 		Feedback:      grade.ApproachFeedback,
@@ -555,7 +568,9 @@ func (s *Service) SubmitLearn(ctx context.Context, id string) (Result, error) {
 			"hints":       -grade.HintDeduction,
 			"streak":      grade.StreakBonus,
 		},
-		Reveal: map[string]string{"reference_diff": live.learnTask.ReferenceDiff},
+		Reveal:       map[string]string{"reference_diff": live.learnTask.ReferenceDiff},
+		MistakeIndex: mistakeIdx,
+		Promotion:    promotion,
 	}, nil
 }
 
@@ -580,6 +595,7 @@ func (s *Service) SubmitReview(ctx context.Context, id string, sub ReviewSubmiss
 		EndLine:       sub.EndLine,
 		OperatorClass: sub.OperatorClass,
 		Diagnosis:     sub.Diagnosis,
+		ForecastFile:  sub.ForecastFile,
 		HintCosts:     live.hintCosts,
 		StartedAt:     live.StartedAt,
 		SubmittedAt:   time.Now(),
@@ -592,6 +608,8 @@ func (s *Service) SubmitReview(ctx context.Context, id string, sub ReviewSubmiss
 	if err != nil {
 		return Result{}, err
 	}
+	mistakeIdx := s.mistakeIndex(ctx)
+	promotion := s.beltPromotion(live.Difficulty, grade.Score, streak)
 	mutation := live.reviewTask.MutationLog.Mutation
 	return Result{
 		Score:         grade.Score,
@@ -602,6 +620,7 @@ func (s *Service) SubmitReview(ctx context.Context, id string, sub ReviewSubmiss
 			"line":      grade.LineScore,
 			"operator":  grade.OperatorScore,
 			"diagnosis": grade.DiagnosisScore,
+			"forecast":  grade.ForecastScore,
 			"hints":     -grade.HintDeduction,
 			"time":      grade.TimeBonus,
 			"streak":    grade.StreakBonus,
@@ -612,7 +631,44 @@ func (s *Service) SubmitReview(ctx context.Context, id string, sub ReviewSubmiss
 			"operator":    mutation.Operator,
 			"description": mutation.Description,
 		},
+		MistakeIndex: mistakeIdx,
+		Promotion:    promotion,
 	}, nil
+}
+
+type SessionSummary struct {
+	ID        string `json:"id"`
+	Mode      string `json:"mode"`
+	Repo      string `json:"repo"`
+	Task      string `json:"task"`
+	Score     int    `json:"score"`
+	State     string `json:"state"`
+	StartedAt string `json:"started_at"`
+	Operator  string `json:"operator,omitempty"`
+}
+
+func (s *Service) ListSessions(ctx context.Context) ([]SessionSummary, error) {
+	sessions, err := s.store.ListSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]SessionSummary, 0, len(sessions))
+	for _, sess := range sessions {
+		if len(out) >= 50 {
+			break
+		}
+		sum := SessionSummary{
+			ID:        sess.ID,
+			Mode:      string(sess.Mode),
+			Repo:      sess.Repo,
+			Task:      sess.Task,
+			Score:     sess.Score,
+			State:     string(sess.State),
+			StartedAt: sess.StartedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+		out = append(out, sum)
+	}
+	return out, nil
 }
 
 func (s *Service) CloseSession(ctx context.Context, id string) error {
@@ -649,6 +705,61 @@ func (s *Service) persistResult(ctx context.Context, live *LiveSession, score in
 	}
 	live.Done = true
 	return streak.Current, nil
+}
+
+func (s *Service) mistakeIndex(ctx context.Context) []OpStat {
+	breakdown, err := s.store.OpBreakdown(ctx)
+	if err != nil || len(breakdown) == 0 {
+		return nil
+	}
+	out := make([]OpStat, 0, len(breakdown))
+	var lowestRate float64 = 1.0
+	var lowestIdx int = -1
+	for i, b := range breakdown {
+		if b.SolveRate < lowestRate {
+			lowestRate = b.SolveRate
+			lowestIdx = i
+		}
+	}
+	for i, b := range breakdown {
+		out = append(out, OpStat{
+			Operator:    b.Operator,
+			Count:       b.Count,
+			SolveRate:   b.SolveRate,
+			Recommended: i == lowestIdx && b.SolveRate < 0.7 && b.Count >= 2,
+		})
+	}
+	return out
+}
+
+func (s *Service) beltPromotion(difficulty, score int, streak int) string {
+	if score < 60 || difficulty >= 5 {
+		return ""
+	}
+	if score >= 90 {
+		return fmt.Sprintf("Belt earned: %s! Perfect score.", beltLabel(difficulty+1))
+	}
+	if score >= 75 && streak >= 3 {
+		return fmt.Sprintf("Belt earned: %s! Streak of %d.", beltLabel(difficulty+1), streak)
+	}
+	return ""
+}
+
+func beltLabel(d int) string {
+	switch d {
+	case 1:
+		return "White Belt"
+	case 2:
+		return "Yellow Belt"
+	case 3:
+		return "Green Belt"
+	case 4:
+		return "Brown Belt"
+	case 5:
+		return "Black Belt"
+	default:
+		return fmt.Sprintf("Level %d", d)
+	}
 }
 
 func (s *Service) withDefaults(opts StartOptions) StartOptions {

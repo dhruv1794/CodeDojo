@@ -139,7 +139,7 @@ func (c *Coach) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade,
 	if c.APIKey == "" {
 		return coach.Grade{}, errors.New("anthropic: APIKey is empty")
 	}
-	system := "You are a strict but fair grader. Respond with the integer score on the first line and a one-sentence justification on the second line. Never include code."
+	system := "You are Jin, a CodeDojo coach grading a submission. Respond with the integer score on the first line and a one-sentence justification on the second line. Be fair but constructive. Never include code."
 	userMsg := fmt.Sprintf("Rubric:\n%s\n\nAnswer:\n%s", req.Rubric, req.Answer)
 	body, err := c.complete(ctx, completeRequest{
 		System:    system,

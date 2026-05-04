@@ -38,6 +38,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) routes(static http.FileSystem) {
 	s.mux.HandleFunc("GET /api/health", s.health)
 	s.mux.HandleFunc("POST /api/preflight", s.preflight)
+	s.mux.HandleFunc("GET /api/sessions", s.listSessions)
 	s.mux.HandleFunc("POST /api/sessions/learn", s.startLearn)
 	s.mux.HandleFunc("POST /api/sessions/review", s.startReview)
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
@@ -207,6 +208,15 @@ func (s *Server) closeSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "closed"})
+}
+
+func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
+	sessions, err := s.app.ListSessions(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": sessions})
 }
 
 func filePath(r *http.Request) string {
