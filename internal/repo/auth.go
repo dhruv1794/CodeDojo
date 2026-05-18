@@ -30,10 +30,6 @@ func EnvAuthHints() AuthHints {
 	}
 }
 
-func authForURL(rawURL string) (transport.AuthMethod, error) {
-	return authForURLWithHints(rawURL, EnvAuthHints())
-}
-
 func authForURLWithHints(rawURL string, hints AuthHints) (transport.AuthMethod, error) {
 	switch {
 	case isHTTPURL(rawURL):

@@ -4,6 +4,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -122,7 +123,7 @@ func ScanWithOptions(ctx context.Context, r repo.Repo, opts ScanOptions) ([]Comm
 		out = append(out, candidate)
 		return nil
 	})
-	if err != nil && err != storer.ErrStop {
+	if err != nil && !errors.Is(err, storer.ErrStop) {
 		return nil, fmt.Errorf("scan commits: %w", err)
 	}
 	return out, nil

@@ -14,7 +14,7 @@ func newStatsCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "stats",
 		Short: "Show aggregate CodeDojo stats",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runStats(cmd.Context(), cmd)
 		},
 	}

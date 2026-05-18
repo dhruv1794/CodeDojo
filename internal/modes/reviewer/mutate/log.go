@@ -31,7 +31,7 @@ func WriteMutationLogFile(path string, log MutationLog) error {
 		return fmt.Errorf("marshal mutation log: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write mutation log: %w", err)
 	}
 	return nil

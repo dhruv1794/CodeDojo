@@ -451,11 +451,11 @@ type aiSummarizerCoach struct {
 	err      error
 }
 
-func (c aiSummarizerCoach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+func (c aiSummarizerCoach) Hint(_ context.Context, _ coach.HintRequest) (coach.Hint, error) {
 	return coach.Hint{}, nil
 }
 
-func (c aiSummarizerCoach) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+func (c aiSummarizerCoach) Grade(_ context.Context, _ coach.GradeRequest) (coach.Grade, error) {
 	if c.err != nil {
 		return coach.Grade{}, c.err
 	}

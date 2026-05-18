@@ -18,7 +18,7 @@ func newInitCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
 		Short: "Configure CodeDojo for first use",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := promptForConfig(cmd, config.Default())
 			if err != nil {
 				return err

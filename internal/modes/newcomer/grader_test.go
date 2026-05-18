@@ -280,15 +280,15 @@ type fakeSandbox struct {
 	cmds   [][]string
 }
 
-func (f *fakeSandbox) Exec(ctx context.Context, cmd []string) (sandbox.ExecResult, error) {
+func (f *fakeSandbox) Exec(_ context.Context, cmd []string) (sandbox.ExecResult, error) {
 	f.cmds = append(f.cmds, cmd)
 	return f.result, f.err
 }
 
-func (f *fakeSandbox) WriteFile(path string, data []byte) error { return nil }
-func (f *fakeSandbox) ReadFile(path string) ([]byte, error)     { return nil, nil }
-func (f *fakeSandbox) Diff() (string, error)                    { return "", nil }
-func (f *fakeSandbox) Close() error                             { return nil }
+func (f *fakeSandbox) WriteFile(_ string, _ []byte) error { return nil }
+func (f *fakeSandbox) ReadFile(_ string) ([]byte, error)  { return nil, nil }
+func (f *fakeSandbox) Diff() (string, error)              { return "", nil }
+func (f *fakeSandbox) Close() error                       { return nil }
 
 type stubGrader struct {
 	score    int
@@ -296,11 +296,11 @@ type stubGrader struct {
 	err      error
 }
 
-func (s stubGrader) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+func (s stubGrader) Hint(_ context.Context, _ coach.HintRequest) (coach.Hint, error) {
 	return coach.Hint{}, nil
 }
 
-func (s stubGrader) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+func (s stubGrader) Grade(_ context.Context, _ coach.GradeRequest) (coach.Grade, error) {
 	if s.err != nil {
 		return coach.Grade{}, s.err
 	}
@@ -312,11 +312,11 @@ type capturingApproachGrader struct {
 	request coach.GradeRequest
 }
 
-func (g *capturingApproachGrader) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+func (g *capturingApproachGrader) Hint(_ context.Context, _ coach.HintRequest) (coach.Hint, error) {
 	return coach.Hint{}, nil
 }
 
-func (g *capturingApproachGrader) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+func (g *capturingApproachGrader) Grade(_ context.Context, req coach.GradeRequest) (coach.Grade, error) {
 	g.request = req
 	return coach.Grade{Score: g.score, Feedback: "ok"}, nil
 }

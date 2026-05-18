@@ -118,7 +118,7 @@ func WriteMarkdown(path string, challenge Challenge) error {
 		return fmt.Errorf("create artifact directory: %w", err)
 	}
 	data := []byte(RenderMarkdown(challenge))
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write on-pr artifact: %w", err)
 	}
 	return nil
@@ -153,6 +153,7 @@ func RenderMarkdown(c Challenge) string {
 }
 
 func changedFiles(ctx context.Context, repoPath, base, head string) ([]string, error) {
+	// #nosec G204 -- fixed git subcommand; base and head are caller-supplied revision names.
 	cmd := exec.CommandContext(ctx, "git", "diff", "--name-only", "--diff-filter=ACMRT", base+"..."+head, "--")
 	cmd.Dir = repoPath
 	out, err := cmd.Output()

@@ -119,11 +119,11 @@ func (e TextEngine) SelectAndApply(ctx context.Context, r repo.Repo, difficulty 
 	if err != nil {
 		return mutate.MutationLog{}, fmt.Errorf("apply mutation to %q: %w", best.file, err)
 	}
-	if err := os.WriteFile(fullPath, []byte(mutated), 0o644); err != nil {
+	if err := os.WriteFile(fullPath, []byte(mutated), 0o600); err != nil {
 		return mutate.MutationLog{}, fmt.Errorf("write %q: %w", best.file, err)
 	}
 	if _, err := mutate.RunGates(ctx, r.Path, e.GateCfg); err != nil {
-		os.WriteFile(fullPath, before, 0o644)
+		_ = os.WriteFile(fullPath, before, 0o600)
 		return mutate.MutationLog{}, fmt.Errorf("gates rejected mutation: %w", err)
 	}
 

@@ -21,7 +21,7 @@ func newSmokeCommand() *cobra.Command {
 		Use:    "smoke",
 		Short:  "Run the Week 1 smoke test",
 		Hidden: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runSmoke(cmd.Context(), cmd)
 		},
 	}

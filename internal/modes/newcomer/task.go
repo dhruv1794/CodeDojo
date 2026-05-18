@@ -347,11 +347,11 @@ func stripCommitPrefix(line string) string {
 			return strings.TrimSpace(line[len(prefix):])
 		}
 	}
-	if close := strings.Index(line, ")"); close > 0 && close+1 < len(line) && line[close+1] == ':' {
+	if closeIdx := strings.Index(line, ")"); closeIdx > 0 && closeIdx+1 < len(line) && line[closeIdx+1] == ':' {
 		kind := lower[:strings.Index(lower, "(")+1]
 		for _, prefix := range conventionalCommitPrefixes {
 			if strings.TrimSuffix(prefix, ":")+"(" == kind {
-				return strings.TrimSpace(line[close+2:])
+				return strings.TrimSpace(line[closeIdx+2:])
 			}
 		}
 	}

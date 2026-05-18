@@ -19,9 +19,7 @@ type ProductError struct {
 
 func (e ProductError) Error() string {
 	base := e.Title
-	if e.Message == "" {
-		base = e.Title
-	} else {
+	if e.Message != "" {
 		base = e.Title + ": " + e.Message
 	}
 	if len(e.Actions) == 0 {

@@ -3,6 +3,7 @@
 package astop
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -88,10 +89,13 @@ func (s tokenReplacementSpec) name() string {
 func (s tokenReplacementSpec) candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
 	parser.SetLanguage(s.Parser())
-	tree := parser.Parse(nil, source)
+	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	if err != nil {
+		return nil
+	}
 	var sites []ASTSite
 	walk(tree.RootNode(), func(node *sitter.Node) bool {
-		if node.Type() != s.NodeType || node.ChildCount() <= uint32(s.TokenIndex) {
+		if node.Type() != s.NodeType || int(node.ChildCount()) <= s.TokenIndex {
 			return true
 		}
 		token := node.Child(s.TokenIndex)

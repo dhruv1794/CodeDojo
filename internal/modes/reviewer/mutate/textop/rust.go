@@ -250,8 +250,8 @@ func (RustErrPropagation) Apply(content string, site Site) (string, error) {
 	}
 	expr := site.Metadata["expr"]
 	old := expr + "?"
-	new_ := expr + ".unwrap()"
-	lines[site.StartLine-1] = strings.Replace(lines[site.StartLine-1], old, new_, 1)
+	replacement := expr + ".unwrap()"
+	lines[site.StartLine-1] = strings.Replace(lines[site.StartLine-1], old, replacement, 1)
 	return strings.Join(lines, "\n"), nil
 }
 

@@ -255,15 +255,15 @@ type recordingSandbox struct {
 	closed bool
 }
 
-func (s *recordingSandbox) Exec(ctx context.Context, cmd []string) (sandbox.ExecResult, error) {
+func (s *recordingSandbox) Exec(_ context.Context, _ []string) (sandbox.ExecResult, error) {
 	return sandbox.ExecResult{}, nil
 }
 
-func (s *recordingSandbox) WriteFile(path string, data []byte) error {
+func (s *recordingSandbox) WriteFile(_ string, _ []byte) error {
 	return nil
 }
 
-func (s *recordingSandbox) ReadFile(path string) ([]byte, error) {
+func (s *recordingSandbox) ReadFile(_ string) ([]byte, error) {
 	return nil, nil
 }
 
@@ -278,11 +278,11 @@ func (s *recordingSandbox) Close() error {
 
 type zeroCostCoach struct{}
 
-func (zeroCostCoach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+func (zeroCostCoach) Hint(_ context.Context, req coach.HintRequest) (coach.Hint, error) {
 	return coach.Hint{Level: req.Level, Content: "I cannot give a more specific hint.", Cost: 0}, nil
 }
 
-func (zeroCostCoach) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+func (zeroCostCoach) Grade(_ context.Context, _ coach.GradeRequest) (coach.Grade, error) {
 	return coach.Grade{}, nil
 }
 

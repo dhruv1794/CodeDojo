@@ -15,7 +15,7 @@ func newOnPRCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "on-pr",
 		Short: "Create a spotter challenge from a PR diff",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runOnPR(cmd.Context(), cmd, opts)
 		},
 	}

@@ -25,7 +25,7 @@ func New() *Store {
 	}
 }
 
-func (s *Store) CreateSession(ctx context.Context, sess session.Session) error {
+func (s *Store) CreateSession(_ context.Context, sess session.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.sessions[sess.ID]; ok {
@@ -35,7 +35,7 @@ func (s *Store) CreateSession(ctx context.Context, sess session.Session) error {
 	return nil
 }
 
-func (s *Store) GetSession(ctx context.Context, id string) (session.Session, error) {
+func (s *Store) GetSession(_ context.Context, id string) (session.Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[id]
@@ -45,7 +45,7 @@ func (s *Store) GetSession(ctx context.Context, id string) (session.Session, err
 	return sess, nil
 }
 
-func (s *Store) ListSessions(ctx context.Context) ([]session.Session, error) {
+func (s *Store) ListSessions(_ context.Context) ([]session.Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]session.Session, 0, len(s.sessions))
@@ -55,7 +55,7 @@ func (s *Store) ListSessions(ctx context.Context) ([]session.Session, error) {
 	return out, nil
 }
 
-func (s *Store) AppendEvent(ctx context.Context, event session.Event) error {
+func (s *Store) AppendEvent(_ context.Context, event session.Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextID++
@@ -67,13 +67,13 @@ func (s *Store) AppendEvent(ctx context.Context, event session.Event) error {
 	return nil
 }
 
-func (s *Store) ListEvents(ctx context.Context, sessionID string) ([]session.Event, error) {
+func (s *Store) ListEvents(_ context.Context, sessionID string) ([]session.Event, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]session.Event(nil), s.events[sessionID]...), nil
 }
 
-func (s *Store) IncrementHintsUsed(ctx context.Context, id string) error {
+func (s *Store) IncrementHintsUsed(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[id]
@@ -85,7 +85,7 @@ func (s *Store) IncrementHintsUsed(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *Store) UpdateState(ctx context.Context, id string, state session.State) error {
+func (s *Store) UpdateState(_ context.Context, id string, state session.State) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[id]
@@ -97,7 +97,7 @@ func (s *Store) UpdateState(ctx context.Context, id string, state session.State)
 	return nil
 }
 
-func (s *Store) UpsertScore(ctx context.Context, id string, score int) error {
+func (s *Store) UpsertScore(_ context.Context, id string, score int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[id]

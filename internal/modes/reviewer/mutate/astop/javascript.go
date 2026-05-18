@@ -3,6 +3,7 @@
 package astop
 
 import (
+	"context"
 	"fmt"
 
 	sitter "github.com/smacker/go-tree-sitter"
@@ -78,7 +79,10 @@ func (JSConditional) Difficulty() int  { return 2 }
 func (JSConditional) Candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
 	parser.SetLanguage(getJSLanguage())
-	tree := parser.Parse(nil, source)
+	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	if err != nil {
+		return nil
+	}
 	var sites []ASTSite
 	walk(tree.RootNode(), func(node *sitter.Node) bool {
 		if node.Type() != "if_statement" {
@@ -149,7 +153,10 @@ func (JSAsyncErrorSwallow) Difficulty() int  { return 3 }
 func (JSAsyncErrorSwallow) Candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
 	parser.SetLanguage(getJSLanguage())
-	tree := parser.Parse(nil, source)
+	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	if err != nil {
+		return nil
+	}
 	var sites []ASTSite
 	walk(tree.RootNode(), func(node *sitter.Node) bool {
 		if node.Type() != "throw_statement" {
@@ -186,7 +193,9 @@ func (JSAsyncErrorSwallow) Apply(source []byte, site ASTSite) ([]byte, error) {
 			indent = nil
 		}
 	}
-	replacement := append(indent, []byte("// error swallowed")...)
+	replacement := make([]byte, 0, len(indent)+len("// error swallowed"))
+	replacement = append(replacement, indent...)
+	replacement = append(replacement, []byte("// error swallowed")...)
 	return replaceByteRange(source, site.StartByte, site.EndByte, replacement)
 }
 
@@ -202,7 +211,10 @@ func (JSArrayBounds) Difficulty() int  { return 2 }
 func (JSArrayBounds) Candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
 	parser.SetLanguage(getJSLanguage())
-	tree := parser.Parse(nil, source)
+	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	if err != nil {
+		return nil
+	}
 	var sites []ASTSite
 	walk(tree.RootNode(), func(node *sitter.Node) bool {
 		if node.Type() != "subscript_expression" {
@@ -262,7 +274,10 @@ func (TSOptionalChain) Difficulty() int  { return 2 }
 func (TSOptionalChain) Candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
 	parser.SetLanguage(getTSLanguage())
-	tree := parser.Parse(nil, source)
+	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	if err != nil {
+		return nil
+	}
 	var sites []ASTSite
 	walk(tree.RootNode(), func(node *sitter.Node) bool {
 		if node.Type() != "member_expression" {
@@ -307,7 +322,10 @@ func (TSTypeGuardWeaken) Difficulty() int  { return 3 }
 func (TSTypeGuardWeaken) Candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
 	parser.SetLanguage(getTSLanguage())
-	tree := parser.Parse(nil, source)
+	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	if err != nil {
+		return nil
+	}
 	var sites []ASTSite
 	walk(tree.RootNode(), func(node *sitter.Node) bool {
 		if node.Type() != "if_statement" {

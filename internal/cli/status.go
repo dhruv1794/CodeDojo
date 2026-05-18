@@ -19,7 +19,7 @@ func newStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show recent CodeDojo sessions",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runStatus(cmd.Context(), cmd, limit)
 		},
 	}

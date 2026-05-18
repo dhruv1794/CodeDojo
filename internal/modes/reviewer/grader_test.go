@@ -314,11 +314,11 @@ type scriptedGrader struct {
 	feedback string
 }
 
-func (g scriptedGrader) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+func (g scriptedGrader) Hint(_ context.Context, _ coach.HintRequest) (coach.Hint, error) {
 	return coach.Hint{}, nil
 }
 
-func (g scriptedGrader) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+func (g scriptedGrader) Grade(_ context.Context, req coach.GradeRequest) (coach.Grade, error) {
 	if g.err != nil {
 		return coach.Grade{}, g.err
 	}
@@ -342,20 +342,20 @@ type countingGrader struct {
 	calls int
 }
 
-func (g *countingGrader) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+func (g *countingGrader) Hint(_ context.Context, _ coach.HintRequest) (coach.Hint, error) {
 	return coach.Hint{}, nil
 }
 
-func (g *countingGrader) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+func (g *countingGrader) Grade(_ context.Context, _ coach.GradeRequest) (coach.Grade, error) {
 	g.calls++
 	return coach.Grade{Score: g.score, Feedback: "feedback"}, nil
 }
 
-func (g *capturingGrader) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+func (g *capturingGrader) Hint(_ context.Context, _ coach.HintRequest) (coach.Hint, error) {
 	return coach.Hint{}, nil
 }
 
-func (g *capturingGrader) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+func (g *capturingGrader) Grade(_ context.Context, req coach.GradeRequest) (coach.Grade, error) {
 	g.request = req
 	return coach.Grade{Score: g.score, Feedback: "feedback"}, nil
 }

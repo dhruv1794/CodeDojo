@@ -155,7 +155,7 @@ type scriptedCoach struct {
 	gradeRequests []GradeRequest
 }
 
-func (c *scriptedCoach) Hint(ctx context.Context, req HintRequest) (Hint, error) {
+func (c *scriptedCoach) Hint(_ context.Context, req HintRequest) (Hint, error) {
 	c.requests = append(c.requests, req)
 	if c.hintErr != nil {
 		return Hint{}, c.hintErr
@@ -168,7 +168,7 @@ func (c *scriptedCoach) Hint(ctx context.Context, req HintRequest) (Hint, error)
 	return hint, nil
 }
 
-func (c *scriptedCoach) Grade(ctx context.Context, req GradeRequest) (Grade, error) {
+func (c *scriptedCoach) Grade(_ context.Context, req GradeRequest) (Grade, error) {
 	c.gradeRequests = append(c.gradeRequests, req)
 	if c.gradeErr != nil {
 		return Grade{}, c.gradeErr

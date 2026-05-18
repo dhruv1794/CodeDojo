@@ -127,14 +127,14 @@ func gradeApproach(ctx context.Context, task Task, submission Submission, opts G
 	if opts.Coach == nil {
 		return coach.Grade{}, nil
 	}
-	cap := opts.DiffLineCap
-	if cap <= 0 {
-		cap = defaultDiffLineCap
+	lineCap := opts.DiffLineCap
+	if lineCap <= 0 {
+		lineCap = defaultDiffLineCap
 	}
 	rubric, err := prompts.Render("newcomer/grade_approach.tmpl", map[string]any{
 		"MaxScore":           maxApproachScore,
 		"FeatureDescription": task.FeatureDescription,
-		"UserDiff":           truncateDiff(submission.UserDiff, cap),
+		"UserDiff":           truncateDiff(submission.UserDiff, lineCap),
 		"BannedIdentifiers":  strings.Join(task.BannedIdentifiers, ", "),
 	})
 	if err != nil {

@@ -5,6 +5,7 @@ package benchmark
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -140,7 +141,7 @@ func runTask(ctx context.Context, pack author.Pack, task author.PackTask, timeou
 		return result
 	}
 	target := filepath.Join(loaded.Path, filepath.FromSlash(task.FilePath))
-	if err := os.WriteFile(target, []byte(mutated), 0o644); err != nil {
+	if err := os.WriteFile(target, []byte(mutated), 0o600); err != nil {
 		result.Error = fmt.Sprintf("write mutated source: %v", err)
 		return result
 	}
@@ -156,6 +157,7 @@ func runTask(ctx context.Context, pack author.Pack, task author.PackTask, timeou
 	result.TestCommand = lang.TestCmd
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	// #nosec G204 -- runs the repository's detected test command by design.
 	cmd := exec.CommandContext(runCtx, lang.TestCmd[0], lang.TestCmd[1:]...)
 	cmd.Dir = loaded.Path
 	if err := cmd.Run(); err != nil {
@@ -163,7 +165,8 @@ func runTask(ctx context.Context, pack author.Pack, task author.PackTask, timeou
 			result.Error = runCtx.Err().Error()
 			return result
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 			return result
 		}

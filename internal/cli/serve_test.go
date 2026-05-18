@@ -11,7 +11,7 @@ import (
 func TestLocalRequestGuardAllowsLocalHostAndOrigin(t *testing.T) {
 	t.Parallel()
 
-	guarded := localRequestGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	guarded := localRequestGuard(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}), "127.0.0.1:18080")
 
@@ -30,7 +30,7 @@ func TestLocalRequestGuardAllowsLocalHostAndOrigin(t *testing.T) {
 func TestLocalRequestGuardRejectsUnexpectedHost(t *testing.T) {
 	t.Parallel()
 
-	guarded := localRequestGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	guarded := localRequestGuard(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Fatal("inner handler was called")
 	}), "127.0.0.1:18080")
 
@@ -48,7 +48,7 @@ func TestLocalRequestGuardRejectsUnexpectedHost(t *testing.T) {
 func TestLocalRequestGuardRejectsCrossOriginRequest(t *testing.T) {
 	t.Parallel()
 
-	guarded := localRequestGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	guarded := localRequestGuard(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Fatal("inner handler was called")
 	}), "127.0.0.1:18080")
 
