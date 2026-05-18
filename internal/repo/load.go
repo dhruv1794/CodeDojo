@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package repo
 
 import (
@@ -10,7 +12,11 @@ import (
 )
 
 func Clone(ctx context.Context, url, dest string) (Repo, error) {
-	auth, err := authForURL(url)
+	return CloneWithAuthHints(ctx, url, dest, EnvAuthHints())
+}
+
+func CloneWithAuthHints(ctx context.Context, url, dest string, hints AuthHints) (Repo, error) {
+	auth, err := authForURLWithHints(url, hints)
 	if err != nil {
 		return Repo{}, fmt.Errorf("resolve auth for %q: %w", url, err)
 	}

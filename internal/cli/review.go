@@ -1,10 +1,14 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dhruvmishra/codedojo/internal/app"
 	"github.com/dhruvmishra/codedojo/internal/cli/repl"
@@ -15,18 +19,30 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// defaultSubmitTimeout bounds how long a submit waits on grading and session
+// cleanup before failing with a clear error instead of hanging indefinitely.
+const defaultSubmitTimeout = 3 * time.Minute
+
 func newReviewCommand() *cobra.Command {
 	var repoPath string
 	var difficulty int
 	var budget int
+	var candidates int
+	var mutations int
+	var compound string
+	var submitTimeout time.Duration
 	cmd := &cobra.Command{
 		Use:   "review",
 		Short: "Start reviewer mode",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts := reviewOptions{
-				Repo:       repoPath,
-				Difficulty: difficulty,
-				Budget:     budget,
+				Repo:          repoPath,
+				Difficulty:    difficulty,
+				Budget:        budget,
+				Candidates:    candidates,
+				Mutations:     mutations,
+				Compound:      compound,
+				SubmitTimeout: submitTimeout,
 			}
 			return runReview(cmd.Context(), cmd, opts)
 		},
@@ -34,13 +50,21 @@ func newReviewCommand() *cobra.Command {
 	cmd.Flags().StringVar(&repoPath, "repo", "", "local path or remote URL for the repo to review")
 	cmd.Flags().IntVar(&difficulty, "difficulty", 0, "mutation difficulty from 1 to 5")
 	cmd.Flags().IntVar(&budget, "budget", 0, "hint count budget")
+	cmd.Flags().IntVar(&candidates, "candidates", 0, "number of candidate files to present for reviewer v2")
+	cmd.Flags().IntVar(&mutations, "mutations", 0, "number of injected mutations for reviewer v2")
+	cmd.Flags().StringVar(&compound, "compound", "", "compound mutation mode: same-flow")
+	cmd.Flags().DurationVar(&submitTimeout, "submit-timeout", defaultSubmitTimeout, "time limit for grading and session cleanup on submit")
 	return cmd
 }
 
 type reviewOptions struct {
-	Repo       string
-	Difficulty int
-	Budget     int
+	Repo          string
+	Difficulty    int
+	Budget        int
+	Candidates    int
+	Mutations     int
+	Compound      string
+	SubmitTimeout time.Duration
 }
 
 func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) error {
@@ -63,6 +87,18 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 	if opts.Budget < 0 {
 		return fmt.Errorf("--budget must be non-negative")
 	}
+	if opts.Candidates < 0 {
+		return fmt.Errorf("--candidates must be non-negative")
+	}
+	if opts.Mutations < 0 {
+		return fmt.Errorf("--mutations must be non-negative")
+	}
+	if opts.Compound != "" && opts.Compound != "same-flow" {
+		return fmt.Errorf("--compound must be same-flow")
+	}
+	if opts.SubmitTimeout < 0 {
+		return fmt.Errorf("--submit-timeout must be non-negative")
+	}
 
 	selected := selectSandbox(ctx, cmd.ErrOrStderr())
 	service, err := app.NewService(ctx, cfg, selected.driver, selected.spec)
@@ -72,18 +108,22 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 	defer service.Close()
 
 	live, err := service.StartReview(ctx, app.StartOptions{
-		Repo:       opts.Repo,
-		Difficulty: opts.Difficulty,
-		HintBudget: opts.Budget,
+		Repo:           opts.Repo,
+		Difficulty:     opts.Difficulty,
+		HintBudget:     opts.Budget,
+		CandidateCount: opts.Candidates,
+		MutationCount:  opts.Mutations,
+		CompoundMode:   opts.Compound,
 	})
 	if err != nil {
 		return err
 	}
 
 	state := &reviewREPL{
-		cmd:     cmd,
-		service: service,
-		live:    live,
+		cmd:           cmd,
+		service:       service,
+		live:          live,
+		submitTimeout: opts.SubmitTimeout,
 	}
 	ui := themeFor(cmd)
 	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\nReviewer task ready. Difficulty %d. Streak %d. Type help for commands.\n",
@@ -92,6 +132,26 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 		live.Streak,
 	); err != nil {
 		return err
+	}
+	if opts.Candidates > 0 && len(live.TaskFiles) > 0 {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Candidate files (%d):\n", len(live.TaskFiles)); err != nil {
+			return err
+		}
+		for _, file := range live.TaskFiles {
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(), "- %s\n", file.Path); err != nil {
+				return err
+			}
+		}
+	}
+	if opts.Mutations > 1 {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "Injected mutations: %d. Submit any one bug you can prove.\n", opts.Mutations); err != nil {
+			return err
+		}
+	}
+	if opts.Compound == "same-flow" {
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Compound mode: same-flow."); err != nil {
+			return err
+		}
 	}
 	return repl.Runner{
 		In:      cmd.InOrStdin(),
@@ -102,9 +162,10 @@ func runReview(ctx context.Context, cmd *cobra.Command, opts reviewOptions) erro
 }
 
 type reviewREPL struct {
-	cmd     *cobra.Command
-	service *app.Service
-	live    *app.LiveSession
+	cmd           *cobra.Command
+	service       *app.Service
+	live          *app.LiveSession
+	submitTimeout time.Duration
 }
 
 func (r *reviewREPL) handle(ctx context.Context, line string) error {
@@ -232,7 +293,18 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 		return err
 	}
 	operator := inferOperatorClass(diagnosis)
-	result, err := r.service.SubmitReview(ctx, r.live.ID, app.ReviewSubmission{
+	ui := themeFor(r.cmd)
+	out := r.cmd.OutOrStdout()
+	timeout := r.submitTimeout
+	if timeout <= 0 {
+		timeout = defaultSubmitTimeout
+	}
+	if _, err := fmt.Fprintf(out, "%s grading submission (up to %s)...\n", ui.Label("submit"), timeout); err != nil {
+		return err
+	}
+	submitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	result, err := r.service.SubmitReview(submitCtx, r.live.ID, app.ReviewSubmission{
 		FilePath:      file,
 		StartLine:     start,
 		EndLine:       end,
@@ -240,9 +312,11 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 		Diagnosis:     diagnosis,
 	})
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+			return fmt.Errorf("submit timed out after %s while grading or closing the kata; rerun with a larger --submit-timeout: %w", timeout, err)
+		}
 		return err
 	}
-	ui := themeFor(r.cmd)
 	if _, err := fmt.Fprintf(r.cmd.OutOrStdout(), "%s\nscore: %s\nfile: %d line: %d operator: %d diagnosis: %d hints: -%d time: %d streak: %d\n%s\n",
 		ui.Banner("Result"),
 		ui.Score(strconv.Itoa(result.Score)),
@@ -256,6 +330,16 @@ func (r *reviewREPL) submit(ctx context.Context, text string) error {
 		result.Feedback,
 	); err != nil {
 		return err
+	}
+	if strings.TrimSpace(result.Commentary) != "" {
+		if _, err := fmt.Fprintf(r.cmd.OutOrStdout(), "\n%s\n%s\n", ui.Label("commentary"), result.Commentary); err != nil {
+			return err
+		}
+	}
+	if strings.TrimSpace(result.ReasoningTrace) != "" {
+		if _, err := fmt.Fprintf(r.cmd.OutOrStdout(), "\n%s\n%s\n", ui.Label("trace"), result.ReasoningTrace); err != nil {
+			return err
+		}
 	}
 	return repl.ErrExit
 }

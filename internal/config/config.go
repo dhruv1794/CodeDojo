@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package config
 
 import (
@@ -23,6 +25,7 @@ type Config struct {
 type CoachConfig struct {
 	Backend string `mapstructure:"backend"`
 	APIKey  string `mapstructure:"api_key"`
+	Model   string `mapstructure:"model"`
 }
 
 type Defaults struct {
@@ -103,6 +106,7 @@ func Save(path string, cfg Config) error {
 	v.SetConfigFile(path)
 	v.Set("coach.backend", cfg.Coach.Backend)
 	v.Set("coach.api_key", cfg.Coach.APIKey)
+	v.Set("coach.model", cfg.Coach.Model)
 	v.Set("defaults.difficulty", cfg.Defaults.Difficulty)
 	v.Set("defaults.hint_budget", cfg.Defaults.HintBudget)
 	v.Set("store_path", cfg.StorePath)
@@ -115,6 +119,7 @@ func Save(path string, cfg Config) error {
 func setDefaults(v *viper.Viper, cfg Config) {
 	v.SetDefault("coach.backend", cfg.Coach.Backend)
 	v.SetDefault("coach.api_key", cfg.Coach.APIKey)
+	v.SetDefault("coach.model", cfg.Coach.Model)
 	v.SetDefault("defaults.difficulty", cfg.Defaults.Difficulty)
 	v.SetDefault("defaults.hint_budget", cfg.Defaults.HintBudget)
 	v.SetDefault("store_path", cfg.StorePath)

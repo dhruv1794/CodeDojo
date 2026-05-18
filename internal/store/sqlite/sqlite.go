@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package sqlite
 
 import (
@@ -6,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dhruvmishra/codedojo/internal/session"
@@ -22,17 +25,29 @@ func Open(ctx context.Context, path string) (*Store, error) {
 			return nil, fmt.Errorf("create sqlite directory: %w", err)
 		}
 	}
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", dsn(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	// modernc/sqlite without WAL hits SQLITE_BUSY under concurrent writers; serialize at the pool layer.
-	db.SetMaxOpenConns(1)
+	if path == ":memory:" {
+		db.SetMaxOpenConns(1)
+	}
 	if err := runMigrations(ctx, db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return &Store{db: db}, nil
+}
+
+func dsn(path string) string {
+	if path == ":memory:" {
+		return path
+	}
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
+	}
+	return path + sep + "_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
 }
 
 func (s *Store) Close() error {

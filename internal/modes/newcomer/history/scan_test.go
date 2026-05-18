@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package history
 
 import (
@@ -6,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dhruvmishra/codedojo/internal/repo"
@@ -69,6 +72,54 @@ func TestScanFiltersAndRanksCommitCandidates(t *testing.T) {
 	}
 }
 
+func TestParseRange(t *testing.T) {
+	got, err := ParseRange("main~5..HEAD")
+	if err != nil {
+		t.Fatalf("ParseRange() error = %v", err)
+	}
+	if got.Base != "main~5" || got.Head != "HEAD" || got.String() != "main~5..HEAD" {
+		t.Fatalf("ParseRange() = %+v", got)
+	}
+	for _, value := range []string{"HEAD", "..HEAD", "main..", "a..b..c"} {
+		if _, err := ParseRange(value); err == nil {
+			t.Fatalf("ParseRange(%q) error = nil, want error", value)
+		}
+	}
+}
+
+func TestScanWithOptionsRestrictsCommitRange(t *testing.T) {
+	dir := newHistoryFixture(t)
+	gitRepo, err := gogit.PlainOpen(dir)
+	if err != nil {
+		t.Fatalf("open fixture: %v", err)
+	}
+	candidates, err := Scan(context.Background(), repo.Repo{Path: dir, Git: gitRepo}, 20)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	var feature CommitCandidate
+	for _, candidate := range candidates {
+		if candidate.Message == "add multiplication" {
+			feature = candidate
+			break
+		}
+	}
+	if feature.SHA == "" {
+		t.Fatalf("missing feature candidate in %#v", candidates)
+	}
+	base := runHistoryGitOutput(t, dir, "rev-parse", feature.SHA+"^")
+	got, err := ScanWithOptions(context.Background(), repo.Repo{Path: dir, Git: gitRepo}, ScanOptions{
+		Limit: 20,
+		Range: CommitRange{Base: base, Head: feature.SHA},
+	})
+	if err != nil {
+		t.Fatalf("ScanWithOptions() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Message != "add multiplication" {
+		t.Fatalf("ScanWithOptions() = %#v, want only add multiplication", got)
+	}
+}
+
 func TestRankPrefersSmallTestBackedCommits(t *testing.T) {
 	candidates := []CommitCandidate{
 		{
@@ -104,6 +155,22 @@ func TestRankPrefersSmallTestBackedCommits(t *testing.T) {
 	}
 	if ranked[0].SHA != "small" {
 		t.Fatalf("Rank()[0].SHA = %q, want small", ranked[0].SHA)
+	}
+}
+
+func TestRustPatchContentHasTest(t *testing.T) {
+	t.Parallel()
+
+	for _, content := range []string{
+		"#[test]\nfn adds_values() {}",
+		"#[cfg(test)]\nmod tests {}",
+	} {
+		if !rustPatchContentHasTest(content) {
+			t.Fatalf("rustPatchContentHasTest(%q) = false, want true", content)
+		}
+	}
+	if rustPatchContentHasTest("fn helper() {}") {
+		t.Fatal("rustPatchContentHasTest() = true for non-test content")
 	}
 }
 
@@ -192,6 +259,17 @@ func runHistoryGit(t *testing.T, dir string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, string(out))
 	}
+}
+
+func runHistoryGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, string(out))
+	}
+	return strings.TrimSpace(string(out))
 }
 
 type fakeScanCache struct {

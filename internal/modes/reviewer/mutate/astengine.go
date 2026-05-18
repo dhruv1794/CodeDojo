@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package mutate
 
 import (
@@ -127,10 +129,12 @@ func (e ASTEngine) SelectAndApply(ctx context.Context, r repo.Repo, difficulty i
 		Mutated:     string(mutated),
 		AppliedAt:   now,
 	}
+	mutation.Profile = ProfileDifficulty(mutation)
 	log := MutationLog{
 		ID:         fmt.Sprintf("%d", now.UnixNano()),
 		RepoPath:   r.Path,
 		Difficulty: difficulty,
+		Profile:    mutation.Profile,
 		Mutation:   mutation,
 		CreatedAt:  now,
 	}

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package anthropic implements the coach.Coach interface against the
 // Anthropic Messages API. It uses prompt caching on the stable system
 // prompt + repo summary, and tracks per-session token usage and cost so
@@ -21,7 +23,7 @@ import (
 )
 
 const (
-	DefaultModel       = "claude-sonnet-4-6"
+	DefaultModel       = "claude-sonnet-4-20250514"
 	DefaultEndpoint    = "https://api.anthropic.com/v1/messages"
 	DefaultAPIVersion  = "2023-06-01"
 	DefaultMaxTokens   = 512
@@ -29,20 +31,22 @@ const (
 	defaultHTTPTimeout = 60 * time.Second
 )
 
-// Pricing in USD per million tokens for the default Sonnet 4.6 model.
-// Override Pricing on the Coach for other models.
-var DefaultPricing = Pricing{
-	InputPerM:        3.00,
-	OutputPerM:       15.00,
-	CacheWritePerM:   3.75,
-	CacheReadPerM:    0.30,
-}
-
 type Pricing struct {
 	InputPerM      float64
 	OutputPerM     float64
 	CacheWritePerM float64
 	CacheReadPerM  float64
+}
+
+// DefaultPricing returns USD-per-million-token pricing for DefaultModel.
+// Override Pricing on the Coach for other models.
+func DefaultPricing() Pricing {
+	return Pricing{
+		InputPerM:      3.00,
+		OutputPerM:     15.00,
+		CacheWritePerM: 3.75,
+		CacheReadPerM:  0.30,
+	}
 }
 
 // Usage aggregates token counts across all calls a Coach has made.
@@ -79,7 +83,7 @@ func New(apiKey string) *Coach {
 		Endpoint:   DefaultEndpoint,
 		APIVersion: DefaultAPIVersion,
 		HTTPClient: &http.Client{Timeout: defaultHTTPTimeout},
-		Pricing:    DefaultPricing,
+		Pricing:    DefaultPricing(),
 		MaxTokens:  DefaultMaxTokens,
 	}
 }
@@ -351,7 +355,7 @@ func parseGrade(body string) (int, string) {
 	}
 	feedback := strings.TrimSpace(rest)
 	if feedback == "" {
-		feedback = first
+		feedback = "(no feedback)"
 	}
 	return score, feedback
 }

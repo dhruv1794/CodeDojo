@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package mutate
 
 import (
@@ -38,6 +40,7 @@ type Site struct {
 type Mutation struct {
 	Operator    string    `json:"operator"`
 	Difficulty  int       `json:"difficulty"`
+	Profile     Profile   `json:"profile,omitempty"`
 	FilePath    string    `json:"file_path"`
 	StartLine   int       `json:"start_line"`
 	StartColumn int       `json:"start_column"`
@@ -54,6 +57,7 @@ type MutationLog struct {
 	RepoPath   string    `json:"repo_path"`
 	HeadSHA    string    `json:"head_sha,omitempty"`
 	Difficulty int       `json:"difficulty"`
+	Profile    Profile   `json:"profile,omitempty"`
 	Mutation   Mutation  `json:"mutation"`
 	CreatedAt  time.Time `json:"created_at"`
 }

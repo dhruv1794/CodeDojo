@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -21,8 +23,9 @@ func Execute() error {
 
 func newRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "codedojo",
-		Short: "Deliberate practice for developers in the AI era",
+		Use:           "codedojo",
+		Short:         "Deliberate practice for developers in the AI era",
+		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			level := slog.LevelInfo
 			if verbose {
@@ -34,6 +37,6 @@ func newRootCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
 	cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose logging")
 	cmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable color output")
-	cmd.AddCommand(newInitCommand(), newReviewCommand(), newLearnCommand(), newServeCommand(), newStatusCommand(), newStatsCommand(), newVersionCommand(), newSmokeCommand())
+	cmd.AddCommand(newInitCommand(), newReviewCommand(), newLearnCommand(), newAuthorCommand(), newSenseiCommand(), newBenchmarkCommand(), newOnPRCommand(), newServeCommand(), newStatusCommand(), newStatsCommand(), newReplayCommand(), newVersionCommand(), newSmokeCommand())
 	return cmd
 }

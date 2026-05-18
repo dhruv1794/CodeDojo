@@ -38,6 +38,12 @@ internal/modes/reviewer
 
 internal/modes/newcomer
   commit history scan/rank, revert/restore, newcomer task generation, grading
+
+internal/modes/author
+  curated mutation pack generation for educator-authored kata sets
+
+internal/modes/benchmark
+  local benchmark-pack execution and JSON result artifacts
 ```
 
 The CLI layer owns process-level wiring. Mode packages expose task generation and grading functions. Infrastructure packages avoid depending on CLI code.
@@ -68,6 +74,8 @@ Implementations:
 - `internal/sandbox/local`: copies work into a temporary directory and runs commands on the host. This is useful for development and tests, but it is not a security boundary.
 
 The CLI uses Docker when the daemon is reachable and falls back to local with a warning.
+
+The local driver sets `cmd.WaitDelay` on every `Exec` so a test command that leaks a background process holding the output pipe cannot hang `cmd.Run` forever; a `WaitDelay`-expired run is reported with the command's real exit code. `Close` removes the temporary directory under a watchdog so a stuck filesystem operation surfaces an error instead of blocking. The `review` and `sensei play` REPLs additionally run `submit` grading and session cleanup under a `--submit-timeout` bound.
 
 ### Coach
 
@@ -101,8 +109,18 @@ created -> running -> submitted -> graded -> closed
 - creating a persisted session row
 - starting a sandbox session
 - recording hint events
+- recording replay events for file opens, writes, test runs, and diff views
+- replaying reviewer mutation logs with original and mutated code snapshots
+- profiling reviewer difficulty across locality, subtlety, and required knowledge
+- generating deterministic or coach-backed after-action commentary after reviewer grading
+- generating post-grade reasoning traces that narrate an investigation path
+- aggregating engagement signals for weak-spot recommendations in stats
+- aggregating coach token usage and estimated cost for the stats dashboard
+- rendering terminal playback frames with elapsed and per-step gap timing
+- exporting replay artifacts as JSON with session, mutation, and event data
 - moving submissions through the state machine
 - closing the sandbox and recording close events
+- constraining newcomer commit selection to an optional `base..head` range
 
 The manager depends on a narrow `session.Store` interface. SQLite and memory stores satisfy the methods needed by the manager; mode-specific persistence, such as mutation logs and history caches, uses separate store methods/interfaces.
 
@@ -111,7 +129,7 @@ The manager depends on a narrow `session.Store` interface. SQLite and memory sto
 `internal/store/sqlite` is the production store. Migrations create tables for:
 
 - sessions
-- events
+- events, including replay timeline events
 - scores
 - mutation logs
 - newcomer history cache
@@ -140,9 +158,9 @@ internal/cli.runReview
   |      +--> CandidateFiles via git history
   |      +--> parse Go files with go/parser
   |      +--> collect Mutator candidates
-  |      +--> apply one AST mutation
+  |      +--> apply one AST mutation, or one per file for reviewer v2 compounds
   |      +--> format source with go/printer
-  |      +--> write .codedojo/mutation.json
+  |      +--> write mutation logs with original/mutated snapshots
   |
   +--> hide mutation log from workspace
   +--> select docker or local sandbox
@@ -151,6 +169,7 @@ internal/cli.runReview
   v
 review REPL
   |
+  +--> candidate file set: optional reviewer v2 distractors from TaskFiles
   +--> tests: sandbox.Exec(test command)
   +--> cat:   sandbox.ReadFile
   +--> diff:  sandbox.Diff
@@ -163,14 +182,46 @@ review REPL
           +--> file score
           +--> line proximity score
           +--> operator class score
-          +--> coach diagnosis grade
+          +--> deterministic diagnosis entity score
+          +--> cached coach mechanism score
           +--> hint deduction, time bonus, streak multiplier
           |
           v
         persist score, update streak, close session
 ```
 
-Reviewer mode currently supports Go AST mutators only.
+Reviewer mode supports Go AST mutators plus Tree-sitter-backed JavaScript,
+TypeScript, and Rust mutators. The non-Go mutators define shared abstract
+operator behavior, such as `boundary` for relational operator changes, then
+provide language-specific parser finders and byte-range applicators.
+Reviewer v2 compound tasks carry multiple mutation logs; grading evaluates the
+submission against each log and scores the best matching injected bug.
+`--compound same-flow` uses the Go AST engine to select compatible mutations in
+one function, producing an interacting same-code-path kata while still allowing
+the user to submit any one provable bug.
+Working-but-wrong operators, such as Go `pagination-window`, target behavior
+changes that keep the code compiling while altering page/window boundaries.
+JavaScript and TypeScript inherit `js-strict-equality`, which weakens strict
+equality into coercive equality for mixed-type edge cases.
+Go `race-lock-drop` removes matched mutex lock/unlock pairs to create
+race-friendly behavior while preserving the protected statements.
+
+## PR Spotter Sequence
+
+```text
+codedojo on-pr --repo . --base origin/main --head HEAD --output spotter-challenge.md
+  |
+  +--> git diff --name-only origin/main...HEAD
+  +--> repo.OpenLocal copies the source repository
+  +--> detect language in the copied tree
+  +--> wrap ScanConfig so only changed files are eligible
+  +--> generate one reviewer mutation in the copied tree
+  +--> write a Markdown challenge artifact
+```
+
+The source repository is only inspected. The selected mutation is applied in
+the copied working tree and summarized in a visible artifact that avoids
+leaking the exact operator or line.
 
 ## Newcomer Sequence
 
@@ -245,7 +296,10 @@ When prompt behavior changes, keep both locations in sync unless the project is 
 
 ## Adding A Reviewer Mutator
 
-Reviewer mutators live under `internal/modes/reviewer/mutate/op`.
+Go reviewer mutators live under `internal/modes/reviewer/mutate/op`. Non-Go
+Tree-sitter mutators live under `internal/modes/reviewer/mutate/astop`; keep
+shared operator semantics in `operators.go` and make language files responsible
+for parser/node selection.
 
 1. Create a new file, for example `timeout.go`.
 2. Implement `mutate.Mutator`:
@@ -308,6 +362,9 @@ Common verification commands:
 GOCACHE=/tmp/codedojo-gocache go test ./...
 GOCACHE=/tmp/codedojo-gocache make smoke
 make e2e
+npm --prefix web run test:e2e
 ```
 
 Run `make smoke` when a change affects CLI wiring, sandbox selection, session management, repository loading, coach wrapping, or the sample repo path.
+
+Run the web E2E test when a change affects the setup screen, repository browser, recent repositories, or other browser-only flows.

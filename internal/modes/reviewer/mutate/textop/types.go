@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package textop provides text/regex-based mutation operators for non-Go languages.
 // These are intentionally simpler than the Go AST operators — they work on raw source
 // text and are designed to produce plausible bugs without requiring a language parser.

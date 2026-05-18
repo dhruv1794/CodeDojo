@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package web
 
 import (
@@ -6,6 +8,9 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/dhruvmishra/codedojo/internal/app"
@@ -15,6 +20,8 @@ import (
 
 //go:embed static/*
 var staticFS embed.FS
+
+const maxRepoBrowserEntries = 500
 
 type Server struct {
 	app *app.Service
@@ -37,10 +44,13 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) routes(static http.FileSystem) {
 	s.mux.HandleFunc("GET /api/health", s.health)
+	s.mux.HandleFunc("GET /api/repos/browse", s.browseRepos)
+	s.mux.HandleFunc("POST /api/repos/open", s.openRepo)
 	s.mux.HandleFunc("POST /api/preflight", s.preflight)
 	s.mux.HandleFunc("GET /api/sessions", s.listSessions)
 	s.mux.HandleFunc("POST /api/sessions/learn", s.startLearn)
 	s.mux.HandleFunc("POST /api/sessions/review", s.startReview)
+	s.mux.HandleFunc("POST /api/sessions/sensei", s.startSensei)
 	s.mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
 	s.mux.HandleFunc("GET /api/sessions/{id}/files", s.listFiles)
 	s.mux.HandleFunc("GET /api/sessions/{id}/files/", s.readFile)
@@ -57,6 +67,54 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (s *Server) browseRepos(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Query().Get("path")
+	showHidden := r.URL.Query().Get("hidden") == "1"
+	if path == "" {
+		var err error
+		path, err = os.UserHomeDir()
+		if err != nil {
+			writeError(w, fmt.Errorf("find home directory: %w", err))
+			return
+		}
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		writeError(w, fmt.Errorf("resolve browser path: %w", err))
+		return
+	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		writeError(w, fmt.Errorf("inspect browser path: %w", err))
+		return
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		writeError(w, fmt.Errorf("browser path is a symlink; choose its real target path instead"))
+		return
+	}
+	if !info.IsDir() {
+		writeError(w, fmt.Errorf("browser path is not a directory"))
+		return
+	}
+	entries, truncated, err := repoBrowserEntries(abs, showHidden, maxRepoBrowserEntries)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	parent := ""
+	if parentPath := filepath.Dir(abs); parentPath != abs {
+		parent = parentPath
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"path":      abs,
+		"parent":    parent,
+		"is_repo":   looksLikeRepo(abs),
+		"entries":   entries,
+		"hidden":    showHidden,
+		"truncated": truncated,
+	})
+}
+
 func (s *Server) preflight(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Repo string `json:"repo"`
@@ -65,6 +123,21 @@ func (s *Server) preflight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := s.app.Preflight(r.Context(), req.Repo)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) openRepo(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Repo string `json:"repo"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	result, err := s.app.Preflight(r.Context(), strings.TrimSpace(req.Repo))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -91,6 +164,19 @@ func (s *Server) startReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	live, err := s.app.StartReview(r.Context(), req)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, publicSession(live))
+}
+
+func (s *Server) startSensei(w http.ResponseWriter, r *http.Request) {
+	var req app.SenseiStartOptions
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	live, err := s.app.StartSensei(r.Context(), req)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -222,6 +308,76 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 func filePath(r *http.Request) string {
 	prefix := "/api/sessions/" + r.PathValue("id") + "/files/"
 	return strings.TrimPrefix(r.URL.Path, prefix)
+}
+
+type repoBrowserEntry struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Repo    bool   `json:"repo"`
+	Hidden  bool   `json:"hidden"`
+	Symlink bool   `json:"symlink"`
+}
+
+func repoBrowserEntries(path string, showHidden bool, limit int) ([]repoBrowserEntry, bool, error) {
+	dirEntries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, false, fmt.Errorf("read browser directory: %w", err)
+	}
+	entries := make([]repoBrowserEntry, 0, len(dirEntries))
+	for _, entry := range dirEntries {
+		name := entry.Name()
+		full := filepath.Join(path, name)
+		symlink := entry.Type()&os.ModeSymlink != 0
+		if !entry.IsDir() {
+			if !symlink || !symlinkPointsToDir(full) {
+				continue
+			}
+		}
+		hidden := strings.HasPrefix(name, ".")
+		if hidden && !showHidden {
+			continue
+		}
+		repo := false
+		if !symlink {
+			repo = looksLikeRepo(full)
+		}
+		entries = append(entries, repoBrowserEntry{
+			Name:    name,
+			Path:    full,
+			Repo:    repo,
+			Hidden:  hidden,
+			Symlink: symlink,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Repo != entries[j].Repo {
+			return entries[i].Repo
+		}
+		if entries[i].Hidden != entries[j].Hidden {
+			return !entries[i].Hidden
+		}
+		return strings.ToLower(entries[i].Name) < strings.ToLower(entries[j].Name)
+	})
+	truncated := false
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+		truncated = true
+	}
+	return entries, truncated, nil
+}
+
+func symlinkPointsToDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func looksLikeRepo(path string) bool {
+	for _, marker := range []string{".git", "go.mod", "package.json", "pyproject.toml", "requirements.txt", "setup.py", "Cargo.toml", ".codedojo.yaml"} {
+		if _, err := os.Stat(filepath.Join(path, marker)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func parseHintLevel(value string) coach.HintLevel {

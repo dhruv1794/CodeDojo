@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package op
 
 import (
@@ -129,6 +131,73 @@ func split(values []int, i int) ([]int, []int, []int) {
 	assertMutator(t, SliceBounds{}, source, want, 2)
 }
 
+func TestPaginationWindowCandidatesAndApply(t *testing.T) {
+	source := `package p
+
+func page(values []int, offset, limit int) []int {
+	window := values[offset : offset+limit]
+	all := values[0:len(values)]
+	tail := values[offset:]
+	return append(window, all[:len(tail)]...)
+}
+`
+	want := `package p
+
+func page(values []int, offset, limit int) []int {
+	window := values[offset : (offset+limit)-1]
+	all := values[0:len(values)]
+	tail := values[offset:]
+	return append(window, all[:len(tail)]...)
+}
+`
+	assertMutator(t, PaginationWindow{}, source, want, 1)
+}
+
+func TestRaceLockDropCandidatesAndApply(t *testing.T) {
+	source := `package p
+
+type Counter struct {
+	mu    Mutex
+	count int
+}
+
+func (c *Counter) Inc() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.count++
+}
+
+func (c *Counter) Read() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.count
+}
+`
+	fileSet := token.NewFileSet()
+	file, err := parser.ParseFile(fileSet, "input.go", source, parser.ParseComments)
+	if err != nil {
+		t.Fatalf("parse input: %v", err)
+	}
+	sites := RaceLockDrop{}.Candidates(file)
+	if len(sites) != 2 {
+		t.Fatalf("Candidates length = %d, want 2", len(sites))
+	}
+	mutation, err := (RaceLockDrop{}).Apply(file, sites[0])
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if mutation.Operator != "race-lock-drop" {
+		t.Fatalf("operator = %q, want race-lock-drop", mutation.Operator)
+	}
+	got := formatFile(t, fileSet, file)
+	if strings.Contains(got, "c.mu.Lock()") || strings.Contains(got, "defer c.mu.Unlock()") {
+		t.Fatalf("Inc lock pair was not removed:\n%s", got)
+	}
+	if !strings.Contains(got, "c.count++") || !strings.Contains(got, "c.mu.RLock()") || !strings.Contains(got, "defer c.mu.RUnlock()") {
+		t.Fatalf("mutation removed unrelated statements:\n%s", got)
+	}
+}
+
 func TestRegistry(t *testing.T) {
 	all := All()
 	gotNames := make([]string, 0, len(all))
@@ -139,7 +208,7 @@ func TestRegistry(t *testing.T) {
 		}
 	}
 	slices.Sort(gotNames)
-	wantNames := []string{"boundary", "conditional", "errordrop", "slicebounds"}
+	wantNames := []string{"boundary", "conditional", "errordrop", "pagination-window", "race-lock-drop", "slicebounds"}
 	if !reflect.DeepEqual(gotNames, wantNames) {
 		t.Fatalf("All names = %#v, want %#v", gotNames, wantNames)
 	}
@@ -155,6 +224,16 @@ func TestRegistry(t *testing.T) {
 	wantDifficultyTwo := []string{"conditional", "slicebounds"}
 	if !reflect.DeepEqual(gotDifficultyTwo, wantDifficultyTwo) {
 		t.Fatalf("ByDifficulty(2) = %#v, want %#v", gotDifficultyTwo, wantDifficultyTwo)
+	}
+	gotDifficultyThree := names(ByDifficulty(3))
+	wantDifficultyThree := []string{"errordrop", "pagination-window"}
+	if !reflect.DeepEqual(gotDifficultyThree, wantDifficultyThree) {
+		t.Fatalf("ByDifficulty(3) = %#v, want %#v", gotDifficultyThree, wantDifficultyThree)
+	}
+	gotDifficultyFour := names(ByDifficulty(4))
+	wantDifficultyFour := []string{"race-lock-drop"}
+	if !reflect.DeepEqual(gotDifficultyFour, wantDifficultyFour) {
+		t.Fatalf("ByDifficulty(4) = %#v, want %#v", gotDifficultyFour, wantDifficultyFour)
 	}
 }
 

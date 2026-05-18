@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package session
 
 import "time"
@@ -22,12 +24,18 @@ const (
 type EventType string
 
 const (
-	EventCreated EventType = "created"
-	EventStarted EventType = "started"
-	EventHint    EventType = "hint"
-	EventSubmit  EventType = "submit"
-	EventGrade   EventType = "grade"
-	EventClosed  EventType = "closed"
+	EventCreated    EventType = "created"
+	EventStarted    EventType = "started"
+	EventHint       EventType = "hint"
+	EventSubmit     EventType = "submit"
+	EventGrade      EventType = "grade"
+	EventCommentary EventType = "commentary"
+	EventTrace      EventType = "trace"
+	EventClosed     EventType = "closed"
+	EventFile       EventType = "file"
+	EventWrite      EventType = "write"
+	EventTests      EventType = "tests"
+	EventDiff       EventType = "diff"
 )
 
 type Session struct {

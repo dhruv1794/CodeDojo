@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package repo
 
 import (
@@ -183,6 +185,16 @@ func TestAuthForURLWithGitHubToken(t *testing.T) {
 	}
 	if basic.Username != "x-access-token" || basic.Password != "secret" {
 		t.Fatalf("auth = %#v", basic)
+	}
+}
+
+func TestAuthForURLWithNoSSHKeysReturnsNil(t *testing.T) {
+	auth, err := authForURLWithHints("git@github.com:acme/repo.git", AuthHints{})
+	if err != nil {
+		t.Fatalf("authForURLWithHints() error = %v", err)
+	}
+	if auth != nil {
+		t.Fatalf("auth = %T, want nil", auth)
 	}
 }
 

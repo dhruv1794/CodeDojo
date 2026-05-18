@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package astop
 
 import (
@@ -11,51 +13,57 @@ import (
 // JSBoundary flips comparison operators in JavaScript/TypeScript using tree-sitter.
 type JSBoundary struct{}
 
-func (JSBoundary) Name() string     { return "js-boundary" }
+func (JSBoundary) Name() string     { return jsBoundarySpec.name() }
 func (JSBoundary) Language() string { return "javascript" }
-func (JSBoundary) Difficulty() int  { return 1 }
+func (JSBoundary) Difficulty() int  { return BoundaryOperator.Difficulty }
+
+var jsBoundarySpec = tokenReplacementSpec{
+	Definition: BoundaryOperator,
+	Prefix:     "js",
+	Language:   "javascript",
+	NodeType:   "binary_expression",
+	TokenIndex: 1,
+	Parser:     getJSLanguage,
+	Describe: func(from, _ string, line int) string {
+		return fmt.Sprintf("flip comparison operator %s on line %d", from, line)
+	},
+}
 
 func (JSBoundary) Candidates(source []byte) []ASTSite {
-	parser := sitter.NewParser()
-	parser.SetLanguage(getJSLanguage())
-	tree := parser.Parse(nil, source)
-	var sites []ASTSite
-	walk(tree.RootNode(), func(node *sitter.Node) bool {
-		if node.Type() != "binary_expression" {
-			return true
-		}
-		if node.ChildCount() < 3 {
-			return true
-		}
-		opNode := node.Child(1)
-		opText := nodeText(source, opNode)
-		if opText != "<" && opText != ">" {
-			return true
-		}
-		sites = append(sites, ASTSite{
-			StartByte:   int(opNode.StartByte()),
-			EndByte:     int(opNode.EndByte()),
-			StartLine:   pointToLine(opNode.StartPoint()),
-			EndLine:     pointToLine(opNode.EndPoint()),
-			Description: fmt.Sprintf("flip comparison operator %s on line %d", opText, pointToLine(opNode.StartPoint())),
-			Metadata:    map[string]string{"op": opText},
-		})
-		return true
-	})
-	return sites
+	return jsBoundarySpec.candidates(source)
 }
 
 func (JSBoundary) Apply(source []byte, site ASTSite) ([]byte, error) {
-	op := site.Metadata["op"]
-	flipped, ok := boundaryFlipMap[op]
-	if !ok {
-		return nil, fmt.Errorf("unknown operator %q", op)
-	}
-	result := make([]byte, len(source)+len(flipped)-len(op))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], []byte(flipped))
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
+	return applyReplacement(source, site)
+}
+
+// --- JavaScript: strict equality coercion ---
+
+// JSStrictEquality weakens strict equality so JavaScript coercion can change behavior.
+type JSStrictEquality struct{}
+
+func (JSStrictEquality) Name() string     { return jsStrictEqualitySpec.name() }
+func (JSStrictEquality) Language() string { return "javascript" }
+func (JSStrictEquality) Difficulty() int  { return StrictEqualityOperator.Difficulty }
+
+var jsStrictEqualitySpec = tokenReplacementSpec{
+	Definition: StrictEqualityOperator,
+	Prefix:     "js",
+	Language:   "javascript",
+	NodeType:   "binary_expression",
+	TokenIndex: 1,
+	Parser:     getJSLanguage,
+	Describe: func(from, to string, line int) string {
+		return fmt.Sprintf("weaken strict equality %s to %s on line %d", from, to, line)
+	},
+}
+
+func (JSStrictEquality) Candidates(source []byte) []ASTSite {
+	return jsStrictEqualitySpec.candidates(source)
+}
+
+func (JSStrictEquality) Apply(source []byte, site ASTSite) ([]byte, error) {
+	return applyReplacement(source, site)
 }
 
 // --- JavaScript: boolean conditional flip ---
@@ -124,17 +132,9 @@ func (JSConditional) Candidates(source []byte) []ASTSite {
 
 func (JSConditional) Apply(source []byte, site ASTSite) ([]byte, error) {
 	if site.Metadata["has_not"] == "true" {
-		result := make([]byte, len(source)-(site.EndByte-site.StartByte))
-		n := copy(result, source[:site.StartByte])
-		copy(result[n:], source[site.EndByte:])
-		return result, nil
+		return replaceByteRange(source, site.StartByte, site.EndByte, nil)
 	}
-	replacement := []byte("!")
-	result := make([]byte, len(source)+len(replacement))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], replacement)
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
+	return replaceByteRange(source, site.StartByte, site.EndByte, []byte("!"))
 }
 
 // --- JavaScript: async error swallow ---
@@ -187,11 +187,7 @@ func (JSAsyncErrorSwallow) Apply(source []byte, site ASTSite) ([]byte, error) {
 		}
 	}
 	replacement := append(indent, []byte("// error swallowed")...)
-	result := make([]byte, len(source)+len(replacement)-(site.EndByte-site.StartByte))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], replacement)
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
+	return replaceByteRange(source, site.StartByte, site.EndByte, replacement)
 }
 
 // --- JavaScript: array index bounds ---
@@ -239,18 +235,15 @@ func (JSArrayBounds) Candidates(source []byte) []ASTSite {
 func (JSArrayBounds) Apply(source []byte, site ASTSite) ([]byte, error) {
 	idx := site.Metadata["idx"]
 	replacement := []byte("-1")
-	result := make([]byte, len(source)+len(replacement))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], replacement)
-	copy(result[n:], source[site.EndByte:])
 	_ = idx
-	return result, nil
+	return replaceByteRange(source, site.StartByte, site.EndByte, replacement)
 }
 
 // AllJS returns all JavaScript AST-based mutators.
 func AllJS() []ASTMutator {
 	return []ASTMutator{
 		JSBoundary{},
+		JSStrictEquality{},
 		JSConditional{},
 		JSAsyncErrorSwallow{},
 		JSArrayBounds{},
@@ -299,12 +292,7 @@ func (TSOptionalChain) Candidates(source []byte) []ASTSite {
 }
 
 func (TSOptionalChain) Apply(source []byte, site ASTSite) ([]byte, error) {
-	replacement := []byte(".")
-	result := make([]byte, len(source)+len(replacement)-(site.EndByte-site.StartByte))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], replacement)
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
+	return replaceByteRange(source, site.StartByte, site.EndByte, []byte("."))
 }
 
 // --- TypeScript: type guard weaken ---
@@ -360,11 +348,7 @@ func (TSTypeGuardWeaken) Candidates(source []byte) []ASTSite {
 
 func (TSTypeGuardWeaken) Apply(source []byte, site ASTSite) ([]byte, error) {
 	obj := site.Metadata["obj"]
-	result := make([]byte, len(source)+len(obj)-(site.EndByte-site.StartByte))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], []byte(obj))
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
+	return replaceByteRange(source, site.StartByte, site.EndByte, []byte(obj))
 }
 
 // AllTS returns TypeScript AST-based mutators (superset of JS).

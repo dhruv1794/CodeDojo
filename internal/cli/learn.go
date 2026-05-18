@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -16,6 +18,7 @@ func newLearnCommand() *cobra.Command {
 	var repoPath string
 	var difficulty int
 	var budget int
+	var commitRange string
 	cmd := &cobra.Command{
 		Use:   "learn",
 		Short: "Start newcomer mode",
@@ -24,6 +27,7 @@ func newLearnCommand() *cobra.Command {
 				Repo:       repoPath,
 				Difficulty: difficulty,
 				Budget:     budget,
+				Range:      commitRange,
 			}
 			return runLearn(cmd.Context(), cmd, opts)
 		},
@@ -31,6 +35,7 @@ func newLearnCommand() *cobra.Command {
 	cmd.Flags().StringVar(&repoPath, "repo", "", "local path or remote URL for the repo to learn from")
 	cmd.Flags().IntVar(&difficulty, "difficulty", 0, "task difficulty from 1 to 5")
 	cmd.Flags().IntVar(&budget, "budget", 0, "hint count budget")
+	cmd.Flags().StringVar(&commitRange, "range", "", "commit range to learn from, formatted base..head")
 	return cmd
 }
 
@@ -38,6 +43,7 @@ type learnOptions struct {
 	Repo       string
 	Difficulty int
 	Budget     int
+	Range      string
 }
 
 func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error {
@@ -69,9 +75,10 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 	defer service.Close()
 
 	live, err := service.StartLearn(ctx, app.StartOptions{
-		Repo:       opts.Repo,
-		Difficulty: opts.Difficulty,
-		HintBudget: opts.Budget,
+		Repo:        opts.Repo,
+		Difficulty:  opts.Difficulty,
+		HintBudget:  opts.Budget,
+		CommitRange: opts.Range,
 	})
 	if err != nil {
 		return err
@@ -83,13 +90,21 @@ func runLearn(ctx context.Context, cmd *cobra.Command, opts learnOptions) error 
 		live:    live,
 	}
 	ui := themeFor(cmd)
-	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\nNewcomer task ready. Difficulty %d. Streak %d.\n%s %s\nType help for commands.\n",
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s\nNewcomer task ready. Difficulty %d. Streak %d.\n%s %s\n",
 		ui.Banner("Newcomer mode"),
 		opts.Difficulty,
 		live.Streak,
 		ui.Label("Feature"),
 		live.Task,
 	); err != nil {
+		return err
+	}
+	if live.CommitRange != "" {
+		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", ui.Label("Range"), live.CommitRange); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), "Type help for commands."); err != nil {
 		return err
 	}
 	return repl.Runner{

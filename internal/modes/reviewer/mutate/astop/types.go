@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package astop
 
 import sitter "github.com/smacker/go-tree-sitter"

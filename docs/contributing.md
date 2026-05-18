@@ -9,6 +9,7 @@ Prerequisites:
 - Go 1.23+
 - Git
 - Docker, optional for Docker sandbox work
+- Node.js 20+, for the local web app and browser smoke tests
 - `golangci-lint`, optional for `make lint`
 
 Run the standard checks from the repository root:
@@ -26,6 +27,12 @@ make e2e-newcomer
 make e2e
 ```
 
+For browser-only flows:
+
+```sh
+npm --prefix web run test:e2e
+```
+
 Use build-tagged integration tests only when the test needs an external service such as Docker, Anthropic, or Ollama.
 
 ## Coding Guidelines
@@ -40,11 +47,22 @@ Use build-tagged integration tests only when the test needs an external service 
 
 ## Adding A Reviewer Mutator
 
-Reviewer mutators are Go AST transforms used by reviewer mode. They live in:
+Reviewer mutators are AST transforms used by reviewer mode. Go mutators live in:
 
 ```text
 internal/modes/reviewer/mutate/op/
 ```
+
+Tree-sitter-backed JavaScript, TypeScript, and Rust mutators live in:
+
+```text
+internal/modes/reviewer/mutate/astop/
+```
+
+For non-Go mutators, define reusable operator semantics in `astop/operators.go`
+when the behavior is language-independent, then keep each language file focused
+on parser setup, candidate node finding, and any language-specific replacement
+shape.
 
 Each mutator implements:
 
@@ -168,6 +186,66 @@ A mutator should create a plausible bug, not just any syntactic change. Before m
 - the diagnosis can be described without leaking the exact implementation
 
 If the operator frequently breaks compilation or all tests, adjust the candidate filter or mutation gates.
+
+Reviewer v2 candidate-set work starts with:
+
+```sh
+codedojo review --repo ./path/to/repo --difficulty 3 --candidates 5
+```
+
+This keeps the single injected mutation model but presents multiple plausible
+source files through `TaskFiles`. When extending this path, preserve the rule
+that candidate metadata must not reveal the selected mutated file.
+
+Compound reviewer katas use:
+
+```sh
+codedojo review --repo ./path/to/repo --difficulty 3 --candidates 5 --mutations 2
+```
+
+The task generator applies one mutation per file and persists every mutation
+log. Grading should match the submission against all injected mutations and
+score the best match, so a user can submit any one bug they can prove.
+For interacting compounds in one Go function, use `--compound same-flow`; this
+keeps both mutations in the same function and avoids destructive statement
+removal operators for the first foundation.
+
+Working-but-wrong bug classes should prefer changes that compile and preserve
+the surrounding control flow. `pagination-window` is the initial Go example: it
+targets two-sided slice windows and decrements the upper bound to create an
+off-by-one page/window result. `js-strict-equality` is the initial coercion
+example: it weakens `===`/`!==` into `==`/`!=` so mixed-type inputs can silently
+change behavior. `race-lock-drop` is the initial race-friendly example: it
+removes a matched `Lock`/`defer Unlock` pair while leaving the critical-section
+body intact.
+
+## Authoring Kata Packs
+
+Use Author mode to export curated reviewer tasks as JSON:
+
+```sh
+codedojo author pack --repo ./path/to/repo --title "10 idiomatic Go bugs" --count 10 --output never_commit/pack.json
+```
+
+Author packs are generated from copied working trees, so the source repository is not modified. The pack includes task metadata and full mutation logs with original/mutated snapshots for review and future import tooling.
+
+Run a pack locally before publishing it:
+
+```sh
+codedojo benchmark run --pack never_commit/pack.json --output never_commit/benchmark-results.json
+```
+
+Benchmark results are JSON artifacts with per-kata command, exit code, duration, and pass/fail status. Use them as the reproducible input for fixed benchmark suites or leaderboard ingestion.
+
+## PR Spotter Challenges
+
+Use `on-pr` to generate a local Markdown artifact from a PR diff:
+
+```sh
+codedojo on-pr --repo . --base origin/main --head HEAD --output spotter-challenge.md
+```
+
+The command inspects `base...head`, restricts mutation candidates to changed files, mutates a copied working tree, and leaves the source repository untouched. Keep the visible artifact challenge-oriented; do not expose the exact operator or line in CI comments.
 
 ## Adding A Coach Backend
 

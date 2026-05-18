@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package app
 
 import (
@@ -16,10 +18,23 @@ type ProductError struct {
 }
 
 func (e ProductError) Error() string {
+	base := e.Title
 	if e.Message == "" {
-		return e.Title
+		base = e.Title
+	} else {
+		base = e.Title + ": " + e.Message
 	}
-	return e.Title + ": " + e.Message
+	if len(e.Actions) == 0 {
+		return base
+	}
+	var b strings.Builder
+	b.WriteString(base)
+	b.WriteString("\n\nNext steps:")
+	for _, action := range e.Actions {
+		b.WriteString("\n- ")
+		b.WriteString(action)
+	}
+	return b.String()
 }
 
 func (e ProductError) Unwrap() error {
@@ -147,5 +162,24 @@ func dockerUnavailableError(cause error) ProductError {
 		Message: "CodeDojo could not start the Docker sandbox. The CLI can fall back to the local driver, but local execution is for development and does not isolate untrusted code.",
 		Actions: []string{"Start Docker Desktop and try again.", "Use only repositories you trust when running with the local fallback.", "Read docs/security.md for the sandbox tradeoff."},
 		cause:   cause,
+	}
+}
+
+func sessionStoreError(path string, cause error) ProductError {
+	message := "CodeDojo could not open its session database."
+	if strings.TrimSpace(path) != "" {
+		message = "CodeDojo could not write to its session database at " + path + "."
+	}
+	return ProductError{
+		Code:    "session_store_unwritable",
+		Title:   "Session database is not writable",
+		Message: message,
+		Actions: []string{
+			"Check that the configured store_path directory exists and is writable.",
+			"Run with a writable config whose store_path points to a writable location, for example: codedojo --config ./never_commit/dogfood-config.yaml sensei play --pack <pack.json>.",
+			"Set store_path to a writable location such as /private/tmp/codedojo.db for local dogfooding.",
+		},
+		Status: http.StatusInternalServerError,
+		cause:  cause,
 	}
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package newcomer
 
 import (
@@ -247,6 +249,28 @@ func TestCountNewTestFuncs(t *testing.T) {
 `
 	if got := CountNewTestFuncs(diff); got != 2 {
 		t.Fatalf("CountNewTestFuncs() = %d, want 2", got)
+	}
+}
+
+func TestCountNewTestFuncsAcrossLanguages(t *testing.T) {
+	t.Parallel()
+
+	diff := `diff --git a/tests/test_calc.py b/tests/test_calc.py
++def test_adds_values():
++async def test_loads_values():
++def helper():
+diff --git a/calc.test.js b/calc.test.js
++test("adds values", () => {
++it("multiplies values", () => {
++describe("calculator", () => {
+diff --git a/src/lib.rs b/src/lib.rs
++#[test]
++fn adds_values() {
++#[cfg(test)]
++mod tests {
+`
+	if got := CountNewTestFuncs(diff); got != 5 {
+		t.Fatalf("CountNewTestFuncs() = %d, want 5", got)
 	}
 }
 

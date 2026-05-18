@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -64,6 +66,7 @@ func TestRunLearnScriptedReimplementation(t *testing.T) {
 		Repo:       repoPath,
 		Difficulty: 2,
 		Budget:     1,
+		Range:      "HEAD~1..HEAD",
 	})
 	if err != nil {
 		t.Fatalf("runLearn returned error: %v\noutput:\n%s", err, out.String())
@@ -72,6 +75,7 @@ func TestRunLearnScriptedReimplementation(t *testing.T) {
 	for _, want := range []string{
 		"Newcomer task ready",
 		"Feature: ",
+		"Range: HEAD~1..HEAD",
 		"wrote 13 lines to calculator/calculator.go",
 		"correctness: 100",
 		"approach: 40",

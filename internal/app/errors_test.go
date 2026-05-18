@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: MIT
+
 package app
 
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -81,4 +84,33 @@ func TestExplainErrorHandlesNil(t *testing.T) {
 	if got.Status != http.StatusInternalServerError {
 		t.Fatalf("Status = %d, want %d", got.Status, http.StatusInternalServerError)
 	}
+}
+
+func TestSessionStoreErrorExplainsWritableConfig(t *testing.T) {
+	got := ExplainError(sessionStoreError("/readonly/codedojo.db", errors.New("attempt to write a readonly database")))
+	if got.Code != "session_store_unwritable" {
+		t.Fatalf("Code = %q, want session_store_unwritable", got.Code)
+	}
+	if got.Status != http.StatusInternalServerError {
+		t.Fatalf("Status = %d, want %d", got.Status, http.StatusInternalServerError)
+	}
+	if got.Message == "" || !containsText(got.Message, "/readonly/codedojo.db") {
+		t.Fatalf("Message = %q, want store path", got.Message)
+	}
+	foundConfigAction := false
+	for _, action := range got.Actions {
+		if containsText(action, "--config") && containsText(action, "store_path") {
+			foundConfigAction = true
+		}
+	}
+	if !foundConfigAction {
+		t.Fatalf("Actions = %#v, want config/store_path recovery action", got.Actions)
+	}
+	if text := got.Error(); !containsText(text, "Next steps:") || !containsText(text, "--config") {
+		t.Fatalf("Error() = %q, want rendered recovery actions", text)
+	}
+}
+
+func containsText(value, needle string) bool {
+	return strings.Contains(value, needle)
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package history
 
 import (
@@ -10,6 +12,7 @@ import (
 
 	"github.com/dhruvmishra/codedojo/internal/repo"
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/storer"
@@ -40,10 +43,62 @@ type CommitCandidate struct {
 }
 
 func Scan(ctx context.Context, r repo.Repo, limit int) ([]CommitCandidate, error) {
+	return ScanWithOptions(ctx, r, ScanOptions{Limit: limit})
+}
+
+type ScanOptions struct {
+	Limit int
+	Range CommitRange
+}
+
+type CommitRange struct {
+	Base string
+	Head string
+}
+
+func ParseRange(value string) (CommitRange, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return CommitRange{}, nil
+	}
+	base, head, ok := strings.Cut(value, "..")
+	if !ok || strings.Contains(head, "..") {
+		return CommitRange{}, fmt.Errorf("commit range must use base..head")
+	}
+	base = strings.TrimSpace(base)
+	head = strings.TrimSpace(head)
+	if base == "" || head == "" {
+		return CommitRange{}, fmt.Errorf("commit range must include both base and head")
+	}
+	return CommitRange{Base: base, Head: head}, nil
+}
+
+func (r CommitRange) String() string {
+	if r.Base == "" && r.Head == "" {
+		return ""
+	}
+	return r.Base + ".." + r.Head
+}
+
+func ScanWithOptions(ctx context.Context, r repo.Repo, opts ScanOptions) ([]CommitCandidate, error) {
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = DefaultScanLimit
 	}
-	iter, err := r.Git.Log(&gogit.LogOptions{})
+	logOpts := &gogit.LogOptions{}
+	excluded := map[plumbing.Hash]bool{}
+	if opts.Range.Head != "" || opts.Range.Base != "" {
+		baseHash, headHash, err := resolveScanRange(r, opts.Range)
+		if err != nil {
+			return nil, err
+		}
+		logOpts.From = headHash
+		excluded, err = reachableCommits(r, baseHash)
+		if err != nil {
+			return nil, err
+		}
+	}
+	iter, err := r.Git.Log(logOpts)
 	if err != nil {
 		return nil, fmt.Errorf("open commit log: %w", err)
 	}
@@ -57,6 +112,9 @@ func Scan(ctx context.Context, r repo.Repo, limit int) ([]CommitCandidate, error
 		if len(out) >= limit {
 			return storer.ErrStop
 		}
+		if excluded[commit.Hash] {
+			return nil
+		}
 		candidate, err := candidateFromCommit(commit)
 		if err != nil {
 			return err
@@ -66,6 +124,38 @@ func Scan(ctx context.Context, r repo.Repo, limit int) ([]CommitCandidate, error
 	})
 	if err != nil && err != storer.ErrStop {
 		return nil, fmt.Errorf("scan commits: %w", err)
+	}
+	return out, nil
+}
+
+func resolveScanRange(r repo.Repo, rng CommitRange) (plumbing.Hash, plumbing.Hash, error) {
+	if rng.Base == "" || rng.Head == "" {
+		return plumbing.ZeroHash, plumbing.ZeroHash, fmt.Errorf("commit range must include both base and head")
+	}
+	baseHash, err := r.Git.ResolveRevision(plumbing.Revision(rng.Base))
+	if err != nil {
+		return plumbing.ZeroHash, plumbing.ZeroHash, fmt.Errorf("resolve range base %q: %w", rng.Base, err)
+	}
+	headHash, err := r.Git.ResolveRevision(plumbing.Revision(rng.Head))
+	if err != nil {
+		return plumbing.ZeroHash, plumbing.ZeroHash, fmt.Errorf("resolve range head %q: %w", rng.Head, err)
+	}
+	return *baseHash, *headHash, nil
+}
+
+func reachableCommits(r repo.Repo, from plumbing.Hash) (map[plumbing.Hash]bool, error) {
+	iter, err := r.Git.Log(&gogit.LogOptions{From: from})
+	if err != nil {
+		return nil, fmt.Errorf("open base commit log: %w", err)
+	}
+	defer iter.Close()
+	out := map[plumbing.Hash]bool{}
+	err = iter.ForEach(func(commit *object.Commit) error {
+		out[commit.Hash] = true
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan base commits: %w", err)
 	}
 	return out, nil
 }
@@ -126,7 +216,7 @@ func changedFiles(patch *object.Patch) []ChangedFile {
 			Additions: stat.Addition,
 			Deletions: stat.Deletion,
 			Renamed:   from != nil && to != nil && filepath.ToSlash(from.Path()) != filepath.ToSlash(to.Path()),
-			Test:      isTestFile(path),
+			Test:      isTestFile(path) || isRustInlineTestPatch(path, filePatch),
 		})
 	}
 	slices.SortFunc(files, func(a, b ChangedFile) int {
@@ -223,6 +313,22 @@ func patchPath(from, to diff.File) string {
 		return filepath.ToSlash(from.Path())
 	}
 	return ""
+}
+
+func isRustInlineTestPatch(path string, filePatch diff.FilePatch) bool {
+	if !strings.HasSuffix(filepath.ToSlash(path), ".rs") {
+		return false
+	}
+	for _, chunk := range filePatch.Chunks() {
+		if rustPatchContentHasTest(chunk.Content()) {
+			return true
+		}
+	}
+	return false
+}
+
+func rustPatchContentHasTest(content string) bool {
+	return strings.Contains(content, "#[test]") || strings.Contains(content, "#[cfg(test)]")
 }
 
 func isTestFile(path string) bool {

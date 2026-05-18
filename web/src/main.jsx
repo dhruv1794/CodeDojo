@@ -11,6 +11,10 @@ const BELTS = [
   { name: "black", label: "Black", css: "var(--belt-black)" },
 ];
 
+const RECENT_REPOS_KEY = "codedojo_recent_repos";
+const ACTIVE_SESSION_KEY = "codedojo_active_session";
+const MAX_RECENT_REPOS = 6;
+
 function beltForDifficulty(d) {
   return BELTS[Math.max(0, Math.min(d || 1, 5) - 1)];
 }
@@ -52,6 +56,67 @@ function cookie(name) {
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${name}=`));
   return match ? decodeURIComponent(match.slice(name.length + 1)) : "";
+}
+
+function loadRecentRepos() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(RECENT_REPOS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((value) => typeof value === "string" && value.trim()).slice(0, MAX_RECENT_REPOS) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentRepos(repos) {
+  try {
+    window.localStorage.setItem(RECENT_REPOS_KEY, JSON.stringify(repos.slice(0, MAX_RECENT_REPOS)));
+  } catch {
+    // Recent repositories are only a convenience; ignore private browsing/storage errors.
+  }
+}
+
+function rememberRecentRepo(value, current = loadRecentRepos()) {
+  const cleaned = value.trim();
+  if (!cleaned) return current;
+  const next = [cleaned, ...current.filter((item) => item !== cleaned)].slice(0, MAX_RECENT_REPOS);
+  saveRecentRepos(next);
+  return next;
+}
+
+function loadActiveSessionID() {
+  try {
+    return window.localStorage.getItem(ACTIVE_SESSION_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function saveActiveSessionID(id) {
+  try {
+    if (id) window.localStorage.setItem(ACTIVE_SESSION_KEY, id);
+    else window.localStorage.removeItem(ACTIVE_SESSION_KEY);
+  } catch {
+    // Active-session recovery is a convenience; ignore private browsing/storage errors.
+  }
+}
+
+function initialRepoFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("repo") || "";
+}
+
+function initialSenseiPackFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("kata") || params.get("pack") || "";
+}
+
+function isRemoteRepo(value) {
+  const trimmed = value.trim();
+  return /^https?:\/\/.+/i.test(trimmed) || /^ssh:\/\/.+/i.test(trimmed) || /^git@[^:]+:.+/i.test(trimmed);
+}
+
+function setupModeForSession(mode) {
+  return mode === "newcomer" ? "learn" : "review";
 }
 
 async function api(path, options = {}) {
@@ -142,16 +207,80 @@ function App() {
   const [beltPromotion, setBeltPromotion] = useState(null);
   const [mistakeIndex, setMistakeIndex] = useState(null);
   const [kataHistory, setKataHistory] = useState(null);
+  const [repoBrowserOpen, setRepoBrowserOpen] = useState(false);
+  const [repoBrowser, setRepoBrowser] = useState(null);
+  const [repoBrowserError, setRepoBrowserError] = useState(null);
+  const [repoBrowserShowHidden, setRepoBrowserShowHidden] = useState(false);
+  const [recentRepos, setRecentRepos] = useState([]);
+  const [openedRepo, setOpenedRepo] = useState("");
+  const [senseiPack, setSenseiPack] = useState("");
 
   const sessionMode = session?.mode || "";
   const checklist = initialWorkflow[sessionMode] || [];
   const doneSteps = checklist.filter(([key]) => workflow[key]).length;
   const selectedAvailability = mode === "review" ? preflight?.review : preflight?.learn;
-  const canStart = repo.trim() && !busy && (!preflight || selectedAvailability?.available);
+  const remoteRepo = isRemoteRepo(repo);
+  const remoteNeedsOpen = remoteRepo && openedRepo !== repo.trim();
+  const senseiMode = Boolean(senseiPack.trim());
+  const canStart = senseiMode
+    ? !busy && senseiPack.trim()
+    : repo.trim() && !busy && !remoteNeedsOpen && (!preflight || selectedAvailability?.available);
 
   useEffect(() => {
-    const fromCookie = cookie("codedojo_repo");
-    if (fromCookie) setRepo(fromCookie);
+    const storedRepos = loadRecentRepos();
+    const fromURL = initialRepoFromURL();
+    const packFromURL = initialSenseiPackFromURL();
+    const fromCookie = fromURL || cookie("codedojo_repo");
+    if (packFromURL) setSenseiPack(packFromURL);
+    if (fromCookie) {
+      setRepo(fromCookie);
+      if (fromURL) setOpenedRepo(fromURL.trim());
+      setRecentRepos(rememberRecentRepo(fromCookie, storedRepos));
+    } else {
+      setRecentRepos(storedRepos);
+    }
+  }, []);
+
+  useEffect(() => {
+    const savedID = loadActiveSessionID();
+    if (!savedID) return undefined;
+    let cancelled = false;
+    (async () => {
+      setBusy("resume");
+      try {
+        const data = await api(`/api/sessions/${savedID}`);
+        if (cancelled) return;
+        if (data.done) {
+          saveActiveSessionID("");
+          return;
+        }
+        setSession(data);
+        setRepo(data.repo || "");
+        setMode(setupModeForSession(data.mode));
+        setWorkflow(data.mode === "newcomer" ? { understand: true } : {});
+        setActivePanel("tests");
+        setOutputs({
+          tests: "Recovered active kata. Run tests to refresh this panel.",
+          diff: "Recovered active kata. Open the diff when you want to inspect the practice copy.",
+          hints: "Recovered active kata. Previously used hints are counted in the session header.",
+          result: "No result yet.",
+        });
+        setErrors({});
+        setResult(null);
+        setForecastFile("");
+        setCoachMessage("");
+        setBeltPromotion(null);
+        setMistakeIndex(null);
+        await loadFiles(data.id);
+      } catch {
+        if (!cancelled) saveActiveSessionID("");
+      } finally {
+        if (!cancelled) setBusy("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -160,31 +289,26 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (senseiMode) {
+      setPreflight(null);
+      setPreflightError(null);
+      return undefined;
+    }
     if (!repo.trim()) {
       setPreflight(null);
       setPreflightError(null);
       return undefined;
     }
+    if (remoteNeedsOpen) {
+      setPreflight(null);
+      setPreflightError(null);
+      return undefined;
+    }
     const id = window.setTimeout(async () => {
-      setBusy("preflight");
-      try {
-        const data = await api("/api/preflight", {
-          method: "POST",
-          body: JSON.stringify({ repo }),
-        });
-        setPreflight(data);
-        setPreflightError(null);
-        if (data.review?.available) setMode("review");
-        else if (data.learn?.available) setMode("learn");
-      } catch (err) {
-        setPreflight(null);
-        setPreflightError(err);
-      } finally {
-        setBusy("");
-      }
+      await inspectRepo("/api/preflight", "preflight");
     }, 350);
     return () => window.clearTimeout(id);
-  }, [repo]);
+  }, [repo, remoteNeedsOpen, senseiMode]);
 
   useEffect(() => {
     document.body.classList.toggle("is-busy", Boolean(busy));
@@ -222,21 +346,52 @@ function App() {
     [session?.id],
   );
 
+  async function inspectRepo(path, label) {
+    setBusy(label);
+    try {
+      const data = await api(path, {
+        method: "POST",
+        body: JSON.stringify({ repo }),
+      });
+      setPreflight(data);
+      setPreflightError(null);
+      setOpenedRepo(repo.trim());
+      if (data.review?.available) setMode("review");
+      else if (data.learn?.available) setMode("learn");
+    } catch (err) {
+      setPreflight(null);
+      setPreflightError(err);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function openRepo() {
+    if (!repo.trim() || busy) return;
+    await inspectRepo("/api/repos/open", "open");
+  }
+
   async function startSession(event) {
     event.preventDefault();
     if (!canStart) return;
     setBusy("start");
     setErrors({});
     try {
-      const data = await api(`/api/sessions/${mode}`, {
+      const endpoint = senseiMode ? "/api/sessions/sensei" : `/api/sessions/${mode}`;
+      const body = senseiMode
+        ? { pack_path: senseiPack.trim(), hint_budget: Number(hintBudget) }
+        : {
+            repo,
+            difficulty: Number(difficulty),
+            hint_budget: Number(hintBudget),
+          };
+      const data = await api(endpoint, {
         method: "POST",
-        body: JSON.stringify({
-          repo,
-          difficulty: Number(difficulty),
-          hint_budget: Number(hintBudget),
-        }),
+        body: JSON.stringify(body),
       });
+      if (!senseiMode) setRecentRepos((current) => rememberRecentRepo(repo, current));
       setSession(data);
+      saveActiveSessionID(data.id);
       setWorkflow(data.mode === "newcomer" ? { understand: true } : {});
       setActivePanel("tests");
       setOutputs({
@@ -374,6 +529,7 @@ function App() {
       setResult(data);
       setOutputs((current) => ({ ...current, result: renderResultText(data) }));
       markStep("submit");
+      saveActiveSessionID("");
       if (data.mistake_index) setMistakeIndex(data.mistake_index);
       if (data.promotion) setBeltPromotion(data.promotion);
     } catch (err) {
@@ -396,6 +552,7 @@ function App() {
   }
 
   function startAnother() {
+    saveActiveSessionID("");
     setSession(null);
     setFiles([]);
     setActiveFile("");
@@ -432,6 +589,44 @@ function App() {
     }
   }
 
+  async function browseRepos(path = "", showHidden = repoBrowserShowHidden) {
+    setBusy("browse");
+    try {
+      const params = new URLSearchParams();
+      if (path) params.set("path", path);
+      if (showHidden) params.set("hidden", "1");
+      const query = params.toString() ? `?${params}` : "";
+      const data = await api(`/api/repos/browse${query}`);
+      setRepoBrowser(data);
+      setRepoBrowserError(null);
+      setRepoBrowserOpen(true);
+    } catch (err) {
+      setRepoBrowserError(err);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function toggleRepoBrowserHidden(showHidden) {
+    setRepoBrowserShowHidden(showHidden);
+    browseRepos(repoBrowser?.path || "", showHidden);
+  }
+
+  function chooseRepoPath(path) {
+    setRepo(path);
+    setRecentRepos((current) => rememberRecentRepo(path, current));
+    setRepoBrowserOpen(false);
+    setRepoBrowserError(null);
+  }
+
+  function forgetRecentRepo(path) {
+    setRecentRepos((current) => {
+      const next = current.filter((item) => item !== path);
+      saveRecentRepos(next);
+      return next;
+    });
+  }
+
   return (
     <main className="app">
       {beltPromotion && <div className="belt-promotion">{beltPromotion}</div>}
@@ -464,15 +659,57 @@ function App() {
           <form id="start-form" className="panel setup-form" onSubmit={startSession}>
             <label>
               Repository
-              <input id="repo" name="repo" placeholder="/path/to/repo or git URL" required value={repo} onChange={(event) => setRepo(event.target.value)} />
+              <div className="repo-input-row">
+                <input id="repo" name="repo" placeholder="/path/to/repo or git URL" required={!senseiMode} value={repo} onChange={(event) => setRepo(event.target.value)} />
+                {remoteRepo && (
+                  <button type="button" className="primary" onClick={openRepo} disabled={!repo.trim() || busy === "open"}>
+                    {busy === "open" ? "Opening..." : "Open in CodeDojo"}
+                  </button>
+                )}
+                <button type="button" className="secondary" onClick={() => browseRepos(repo && !remoteRepo ? repo : "")} disabled={busy === "browse"}>
+                  {busy === "browse" ? "Browsing..." : "Browse"}
+                </button>
+              </div>
+              {remoteRepo && remoteNeedsOpen && (
+                <span className="repo-open-note">Server-side clone and inspection run only after opening the Git URL.</span>
+              )}
             </label>
+            <label>
+              Sensei pack
+              <input id="sensei-pack" name="sensei-pack" placeholder="/path/to/sensei-kata.json" value={senseiPack} onChange={(event) => setSenseiPack(event.target.value)} />
+              {senseiMode && (
+                <span className="repo-open-note">Starting uses this authored pack and skips automatic repository preflight.</span>
+              )}
+            </label>
+            {repoBrowserOpen && (
+              <RepoBrowser
+                browser={repoBrowser}
+                error={repoBrowserError}
+                busy={busy === "browse"}
+                showHidden={repoBrowserShowHidden}
+                onBrowse={browseRepos}
+                onToggleHidden={toggleRepoBrowserHidden}
+                onSelect={chooseRepoPath}
+                onClose={() => setRepoBrowserOpen(false)}
+              />
+            )}
+            {recentRepos.length > 0 && (
+              <RecentRepos
+                repos={recentRepos}
+                active={repo}
+                onSelect={setRepo}
+                onRemove={forgetRecentRepo}
+              />
+            )}
             <input id="mode" name="mode" type="hidden" value={mode} />
             <Preflight preflight={preflight} error={preflightError} />
 
-            <div className="mode-grid" aria-label="Session mode">
-              <ModeCard name="review" selected={mode === "review"} availability={preflight?.review} recommended={preflight?.review?.available} language={preflight?.language} onSelect={setMode} />
-              <ModeCard name="learn" selected={mode === "learn"} availability={preflight?.learn} recommended={!preflight?.review?.available && preflight?.learn?.available} language={preflight?.language} onSelect={setMode} />
-            </div>
+            {!senseiMode && (
+              <div className="mode-grid" aria-label="Session mode">
+                <ModeCard name="review" selected={mode === "review"} availability={preflight?.review} recommended={preflight?.review?.available} language={preflight?.language} onSelect={setMode} />
+                <ModeCard name="learn" selected={mode === "learn"} availability={preflight?.learn} recommended={!preflight?.review?.available && preflight?.learn?.available} language={preflight?.language} onSelect={setMode} />
+              </div>
+            )}
 
             <div className="setup-options">
               <label>
@@ -499,7 +736,7 @@ function App() {
               </div>
             )}
             <button id="start-button" type="submit" disabled={!canStart}>
-              {busy === "start" ? "Starting..." : "Start kata"}
+              {busy === "start" ? "Starting..." : senseiMode ? "Start Sensei kata" : "Start kata"}
             </button>
           </form>
 
@@ -719,6 +956,136 @@ function Preflight({ preflight, error }) {
       <span>{availabilityText("Review", preflight.review)} · {availabilityText("Learn", preflight.learn)}</span>
     </div>
   );
+}
+
+function RepoBrowser({ browser, error, busy, showHidden, onBrowse, onToggleHidden, onSelect, onClose }) {
+  const [jumpPath, setJumpPath] = useState(browser?.path || "");
+  const breadcrumbs = browser?.path ? browserBreadcrumbs(browser.path) : [];
+
+  useEffect(() => {
+    setJumpPath(browser?.path || "");
+  }, [browser?.path]);
+
+  function jump() {
+    const path = jumpPath.trim();
+    if (path) onBrowse(path);
+  }
+
+  return (
+    <div className="repo-browser" role="region" aria-label="Repository browser">
+      <div className="repo-browser-head">
+        <div>
+          <strong>{browser?.path || "Choose a repository"}</strong>
+          {browser?.is_repo && <span>Repository detected</span>}
+        </div>
+        <button type="button" className="icon-button" aria-label="Close repository browser" onClick={onClose}>×</button>
+      </div>
+      {error && <div className="error-card compact"><strong>{error.title}</strong><span>{error.message}</span></div>}
+      {browser ? (
+        <>
+          <nav className="repo-browser-breadcrumbs" aria-label="Current folder path">
+            {breadcrumbs.map((crumb, index) => (
+              <React.Fragment key={crumb.path}>
+                {index > 0 && <span aria-hidden="true">/</span>}
+                <button type="button" onClick={() => onBrowse(crumb.path)} disabled={busy || crumb.path === browser.path}>
+                  {crumb.label}
+                </button>
+              </React.Fragment>
+            ))}
+          </nav>
+          <div className="repo-browser-jump">
+            <input
+              aria-label="Repository browser path"
+              value={jumpPath}
+              onChange={(event) => setJumpPath(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  jump();
+                }
+              }}
+              disabled={busy}
+            />
+            <button type="button" onClick={jump} disabled={busy || !jumpPath.trim()}>Go</button>
+          </div>
+          <div className="repo-browser-actions">
+            {browser.parent && <button type="button" onClick={() => onBrowse(browser.parent)} disabled={busy}>Up</button>}
+            <label className="repo-browser-toggle">
+              <input type="checkbox" checked={showHidden} onChange={(event) => onToggleHidden(event.target.checked)} disabled={busy} />
+              <span>Show hidden</span>
+            </label>
+            <button type="button" className={browser.is_repo ? "primary" : "secondary"} onClick={() => onSelect(browser.path)} disabled={busy}>
+              {browser.is_repo ? "Use this repository" : "Use this folder anyway"}
+            </button>
+          </div>
+          {browser.truncated && <div className="repo-browser-note">Showing the first 500 matching folders.</div>}
+          <div className={`repo-browser-list ${browser.entries?.length ? "" : "empty-state"}`}>
+            {browser.entries?.length ? browser.entries.map((entry) => (
+              <div key={entry.path} className={`repo-browser-entry ${entry.repo ? "repo" : ""} ${entry.symlink ? "symlink" : ""}`}>
+                <button type="button" onClick={() => onBrowse(entry.path)} disabled={busy || entry.symlink}>
+                  <strong>{entry.name}</strong>
+                  <span>{entry.symlink ? "Symlinked folder" : entry.repo ? "Repository" : entry.hidden ? "Hidden folder" : "Folder"}</span>
+                </button>
+                {entry.repo && !entry.symlink && <button type="button" className="secondary" onClick={() => onSelect(entry.path)} disabled={busy}>Select</button>}
+              </div>
+            )) : "No child folders found."}
+          </div>
+        </>
+      ) : (
+        <button type="button" onClick={() => onBrowse("")} disabled={busy}>Open home folder</button>
+      )}
+    </div>
+  );
+}
+
+function browserBreadcrumbs(path) {
+  const normalized = path.replace(/[\/\\]+$/, "") || path;
+  if (normalized === "/" || /^[A-Za-z]:[\/\\]?$/.test(normalized)) {
+    return [{ label: normalized, path: normalized }];
+  }
+  if (/^[A-Za-z]:[\/\\]/.test(normalized)) {
+    const drive = normalized.slice(0, 2);
+    const parts = normalized.slice(3).split(/[\/\\]+/).filter(Boolean);
+    let current = `${drive}\\`;
+    return [
+      { label: current, path: current },
+      ...parts.map((part) => {
+        current = current.endsWith("\\") ? `${current}${part}` : `${current}\\${part}`;
+        return { label: part, path: current };
+      }),
+    ];
+  }
+  const absolute = normalized.startsWith("/");
+  const parts = normalized.split("/").filter(Boolean);
+  let current = absolute ? "/" : "";
+  const crumbs = absolute ? [{ label: "/", path: "/" }] : [];
+  for (const part of parts) {
+    current = current === "/" ? `/${part}` : current ? `${current}/${part}` : part;
+    crumbs.push({ label: part, path: current });
+  }
+  return crumbs;
+}
+
+function RecentRepos({ repos, active, onSelect, onRemove }) {
+  return (
+    <div className="recent-repos" aria-label="Recent repositories">
+      {repos.map((path) => (
+        <div key={path} className={`recent-repo ${path === active ? "active" : ""}`}>
+          <button type="button" onClick={() => onSelect(path)}>
+            <strong>{repoName(path)}</strong>
+            <span>{path}</span>
+          </button>
+          <button type="button" className="icon-button" aria-label={`Remove ${path} from recent repositories`} onClick={() => onRemove(path)}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function repoName(path) {
+  const trimmed = path.replace(/[\/\\]+$/, "");
+  const parts = trimmed.split(/[\/\\]/);
+  return parts[parts.length - 1] || path;
 }
 
 function ModeCard({ name, selected, availability, recommended, language, onSelect }) {

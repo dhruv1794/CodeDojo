@@ -118,6 +118,22 @@ form button[type="submit"] {
   color: var(--accent-ink);
 }
 
+button.secondary {
+  background: var(--surface-dim);
+  color: var(--ink);
+}
+
+button.icon-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
 .app {
   min-height: 100vh;
   padding: 24px;
@@ -216,6 +232,194 @@ form button[type="submit"] {
 
 .setup-form {
   padding: 18px;
+}
+
+.repo-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.repo-open-note {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.repo-browser {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-dim);
+  padding: 12px;
+}
+
+.repo-browser-head,
+.repo-browser-actions,
+.repo-browser-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.repo-browser-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.repo-browser-head strong {
+  overflow-wrap: anywhere;
+}
+
+.repo-browser-head span {
+  color: var(--success-text);
+  font-size: 12px;
+}
+
+.repo-browser-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow-x: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.repo-browser-breadcrumbs button {
+  min-width: 0;
+  max-width: 180px;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 2px 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-browser-breadcrumbs button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.repo-browser-jump {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.repo-browser-toggle {
+  display: inline-flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.repo-browser-toggle input {
+  width: auto;
+  margin: 0;
+}
+
+.repo-browser-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.repo-browser-list {
+  display: grid;
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.repo-browser-entry {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 6px;
+}
+
+.repo-browser-entry.repo {
+  border-color: var(--accent);
+}
+
+.repo-browser-entry.symlink {
+  border-style: dashed;
+  background: var(--surface-dim);
+}
+
+.repo-browser-entry > button:first-child {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 5px;
+}
+
+.repo-browser-entry strong {
+  overflow-wrap: anywhere;
+}
+
+.repo-browser-entry span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.recent-repos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.recent-repo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+
+.recent-repo > button:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  background: var(--surface-dim);
+}
+
+.recent-repo.active > button:first-child {
+  border-color: var(--accent);
+  background: var(--success-bg);
+}
+
+.recent-repo strong,
+.recent-repo span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-repo span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.error-card.compact {
+  padding: 8px;
 }
 
 .preflight {
@@ -898,6 +1102,7 @@ pre {
   }
 
   .mode-grid,
+  .repo-input-row,
   .setup-options {
     grid-template-columns: 1fr;
   }

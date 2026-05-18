@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -44,7 +46,7 @@ func TestRunStatsPrintsAggregates(t *testing.T) {
 		t.Fatalf("runStats() error = %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{"Katas: 2 total", "Streak: current 1, best 1", "By mode:", "By repo:", "Mistake Index:", "boundary"} {
+	for _, want := range []string{"Katas: 2 total", "Streak: current 1, best 1", "Next practice:", "By mode:", "By repo:", "Mistake Index:", "Engagement Signals:", "Cost Dashboard:", "anthropic", "$0.0010", "boundary", "subtlety low"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stats output missing %q:\n%s", want, got)
 		}
@@ -77,10 +79,26 @@ func seedStatusStore(t *testing.T) string {
 		ID:         "mut-1",
 		RepoPath:   "/tmp/sample-go-repo",
 		Difficulty: 1,
-		Mutation:   mutate.Mutation{Operator: "boundary", FilePath: "calculator.go", StartLine: 1, EndLine: 1},
+		Profile:    mutate.ProfileDifficulty(mutate.Mutation{Operator: "boundary", StartLine: 1, EndLine: 1}),
+		Mutation:   mutate.Mutation{Operator: "boundary", FilePath: "calculator.go", StartLine: 1, EndLine: 1, Profile: mutate.ProfileDifficulty(mutate.Mutation{Operator: "boundary", StartLine: 1, EndLine: 1})},
 		CreatedAt:  started,
 	}); err != nil {
 		t.Fatalf("save mutation log: %v", err)
+	}
+	if err := store.AppendEvent(ctx, session.Event{SessionID: "review-1", Type: session.EventGrade, Payload: "score=120", CreatedAt: started.Add(4 * time.Minute)}); err != nil {
+		t.Fatalf("append grade event: %v", err)
+	}
+	if err := store.SaveCoachUsage(ctx, sqlite.CoachUsage{
+		SessionID:    "review-1",
+		Backend:      "anthropic",
+		Model:        "claude-sonnet-4-20250514",
+		Operation:    "hint",
+		InputTokens:  100,
+		OutputTokens: 20,
+		CostUSD:      0.001,
+		CreatedAt:    started,
+	}); err != nil {
+		t.Fatalf("save coach usage: %v", err)
 	}
 	if _, err := store.RecordStreakResult(ctx, true); err != nil {
 		t.Fatalf("record streak: %v", err)

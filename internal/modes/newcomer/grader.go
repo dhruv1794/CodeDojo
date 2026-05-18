@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package newcomer
 
 import (
@@ -196,14 +198,28 @@ func CountNewTestFuncs(diff string) int {
 			continue
 		}
 		stripped := strings.TrimSpace(line[1:])
-		if testFuncPattern.MatchString(stripped) {
+		if isAddedTestDeclaration(stripped) {
 			count++
 		}
 	}
 	return count
 }
 
-var testFuncPattern = regexp.MustCompile(`^func\s+Test[A-Z][A-Za-z0-9_]*\s*\(`)
+func isAddedTestDeclaration(line string) bool {
+	for _, pattern := range testDeclarationPatterns {
+		if pattern.MatchString(line) {
+			return true
+		}
+	}
+	return false
+}
+
+var testDeclarationPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`^func\s+Test[A-Z][A-Za-z0-9_]*\s*\(`),
+	regexp.MustCompile(`^(?:async\s+)?def\s+test_[A-Za-z0-9_]*\s*\(`),
+	regexp.MustCompile(`^(?:it|test)\s*\(`),
+	regexp.MustCompile(`^#\s*\[\s*test\s*\]`),
+}
 
 func clamp(n, low, high int) int {
 	if n < low {

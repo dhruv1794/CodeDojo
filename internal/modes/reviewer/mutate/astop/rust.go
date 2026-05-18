@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package astop
 
 import (
@@ -13,58 +15,28 @@ import (
 // in strings, comments, and generic type parameters.
 type RustBoundary struct{}
 
-func (RustBoundary) Name() string     { return "rs-boundary" }
+func (RustBoundary) Name() string     { return rustBoundarySpec.name() }
 func (RustBoundary) Language() string { return "rust" }
-func (RustBoundary) Difficulty() int  { return 1 }
+func (RustBoundary) Difficulty() int  { return BoundaryOperator.Difficulty }
+
+var rustBoundarySpec = tokenReplacementSpec{
+	Definition: BoundaryOperator,
+	Prefix:     "rs",
+	Language:   "rust",
+	NodeType:   "binary_expression",
+	TokenIndex: 1,
+	Parser:     getRustLanguage,
+	Describe: func(from, _ string, line int) string {
+		return fmt.Sprintf("flip comparison operator %s on line %d", from, line)
+	},
+}
 
 func (RustBoundary) Candidates(source []byte) []ASTSite {
-	parser := sitter.NewParser()
-	parser.SetLanguage(getRustLanguage())
-	tree := parser.Parse(nil, source)
-	var sites []ASTSite
-	walk(tree.RootNode(), func(node *sitter.Node) bool {
-		if node.Type() != "binary_expression" {
-			return true
-		}
-		if node.ChildCount() < 3 {
-			return true
-		}
-		opNode := node.Child(1)
-		opText := nodeText(source, opNode)
-		if opText != "<" && opText != ">" {
-			return true
-		}
-		sites = append(sites, ASTSite{
-			StartByte:   int(opNode.StartByte()),
-			EndByte:     int(opNode.EndByte()),
-			StartLine:   pointToLine(opNode.StartPoint()),
-			EndLine:     pointToLine(opNode.EndPoint()),
-			Description: fmt.Sprintf("flip comparison operator %s on line %d", opText, pointToLine(opNode.StartPoint())),
-			Metadata:    map[string]string{"op": opText},
-		})
-		return true
-	})
-	return sites
+	return rustBoundarySpec.candidates(source)
 }
 
 func (RustBoundary) Apply(source []byte, site ASTSite) ([]byte, error) {
-	op := site.Metadata["op"]
-	flipped, ok := boundaryFlipMap[op]
-	if !ok {
-		return nil, fmt.Errorf("unknown operator %q", op)
-	}
-	result := make([]byte, len(source)+len(flipped)-len(op))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], []byte(flipped))
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
-}
-
-var boundaryFlipMap = map[string]string{
-	"<":  "<=",
-	">":  ">=",
-	"<=": "<",
-	">=": ">",
+	return applyReplacement(source, site)
 }
 
 // --- Rust: Option/Result branch inversion ---
@@ -75,18 +47,7 @@ type RustOptionInvert struct{}
 
 func (RustOptionInvert) Name() string     { return "rs-option-invert" }
 func (RustOptionInvert) Language() string { return "rust" }
-func (RustOptionInvert) Difficulty() int  { return 2 }
-
-var rustOptionMethods = map[string]struct{}{
-	"is_some": {}, "is_none": {}, "is_ok": {}, "is_err": {},
-}
-
-var rustOptionFlip = map[string]string{
-	"is_some": "is_none",
-	"is_none": "is_some",
-	"is_ok":   "is_err",
-	"is_err":  "is_ok",
-}
+func (RustOptionInvert) Difficulty() int  { return OptionPredicateOperator.Difficulty }
 
 func (RustOptionInvert) Candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
@@ -111,17 +72,17 @@ func (RustOptionInvert) Candidates(source []byte) []ASTSite {
 			return true
 		}
 		name := nodeText(source, nameNode)
-		if _, ok := rustOptionMethods[name]; !ok {
+		flipped, ok := replacementFor(OptionPredicateOperator, name)
+		if !ok {
 			return true
 		}
-		flipped := rustOptionFlip[name]
 		sites = append(sites, ASTSite{
 			StartByte:   int(nameNode.StartByte()),
 			EndByte:     int(nameNode.EndByte()),
 			StartLine:   pointToLine(nameNode.StartPoint()),
 			EndLine:     pointToLine(nameNode.EndPoint()),
 			Description: fmt.Sprintf("invert %s() to %s() on line %d", name, flipped, pointToLine(nameNode.StartPoint())),
-			Metadata:    map[string]string{"op": name},
+			Metadata:    replacementMetadata(name, flipped),
 		})
 		return true
 	})
@@ -129,16 +90,7 @@ func (RustOptionInvert) Candidates(source []byte) []ASTSite {
 }
 
 func (RustOptionInvert) Apply(source []byte, site ASTSite) ([]byte, error) {
-	op := site.Metadata["op"]
-	flipped, ok := rustOptionFlip[op]
-	if !ok {
-		return nil, fmt.Errorf("unknown option method %q", op)
-	}
-	result := make([]byte, len(source)+len(flipped)-len(op))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], []byte(flipped))
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
+	return applyReplacement(source, site)
 }
 
 // --- Rust: range bound mutation ---
@@ -148,52 +100,30 @@ type RustRangeBound struct{}
 
 func (RustRangeBound) Name() string     { return "rs-range-bound" }
 func (RustRangeBound) Language() string { return "rust" }
-func (RustRangeBound) Difficulty() int  { return 2 }
+func (RustRangeBound) Difficulty() int  { return RangeBoundOperator.Difficulty }
 
-func (RustRangeBound) Candidates(source []byte) []ASTSite {
-	parser := sitter.NewParser()
-	parser.SetLanguage(getRustLanguage())
-	tree := parser.Parse(nil, source)
-	var sites []ASTSite
-	walk(tree.RootNode(), func(node *sitter.Node) bool {
-		if node.Type() != "range_expression" {
-			return true
-		}
-		if node.ChildCount() < 3 {
-			return true
-		}
-		opNode := node.Child(1)
-		opText := nodeText(source, opNode)
-		if opText != ".." && opText != "..=" {
-			return true
-		}
-		flipped := "..="
+var rustRangeBoundSpec = tokenReplacementSpec{
+	Definition: RangeBoundOperator,
+	Prefix:     "rs",
+	Language:   "rust",
+	NodeType:   "range_expression",
+	TokenIndex: 1,
+	Parser:     getRustLanguage,
+	Describe: func(from, to string, line int) string {
 		kind := "exclusive"
-		if opText == "..=" {
-			flipped = ".."
+		if from == "..=" {
 			kind = "inclusive"
 		}
-		sites = append(sites, ASTSite{
-			StartByte:   int(opNode.StartByte()),
-			EndByte:     int(opNode.EndByte()),
-			StartLine:   pointToLine(opNode.StartPoint()),
-			EndLine:     pointToLine(opNode.EndPoint()),
-			Description: fmt.Sprintf("flip %s range to %s on line %d", kind, flipped, pointToLine(opNode.StartPoint())),
-			Metadata:    map[string]string{"kind": kind, "from": opText, "to": flipped},
-		})
-		return true
-	})
-	return sites
+		return fmt.Sprintf("flip %s range to %s on line %d", kind, to, line)
+	},
+}
+
+func (RustRangeBound) Candidates(source []byte) []ASTSite {
+	return rustRangeBoundSpec.candidates(source)
 }
 
 func (RustRangeBound) Apply(source []byte, site ASTSite) ([]byte, error) {
-	to := site.Metadata["to"]
-	from := site.Metadata["from"]
-	result := make([]byte, len(source)+len(to)-len(from))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], []byte(to))
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
+	return applyReplacement(source, site)
 }
 
 // --- Rust: error propagation weakening ---
@@ -238,11 +168,7 @@ func (RustErrPropagation) Candidates(source []byte) []ASTSite {
 
 func (RustErrPropagation) Apply(source []byte, site ASTSite) ([]byte, error) {
 	replacement := []byte(".unwrap()")
-	result := make([]byte, len(source)-1+len(replacement))
-	n := copy(result, source[:site.StartByte])
-	n += copy(result[n:], replacement)
-	copy(result[n:], source[site.EndByte:])
-	return result, nil
+	return replaceByteRange(source, site.StartByte, site.EndByte, replacement)
 }
 
 // AllRust returns all Rust AST-based mutators.

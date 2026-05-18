@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package op
 
 import (
@@ -12,6 +14,8 @@ func All() []mutate.Mutator {
 		Boundary{},
 		Conditional{},
 		ErrorDrop{},
+		PaginationWindow{},
+		RaceLockDrop{},
 		SliceBounds{},
 	}
 }

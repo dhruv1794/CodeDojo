@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package reviewer
 
 import (
@@ -137,10 +139,12 @@ func (e TextEngine) SelectAndApply(ctx context.Context, r repo.Repo, difficulty 
 		Mutated:     mutated,
 		AppliedAt:   now,
 	}
+	mutation.Profile = mutate.ProfileDifficulty(mutation)
 	log := mutate.MutationLog{
 		ID:         fmt.Sprintf("%d", now.UnixNano()),
 		RepoPath:   r.Path,
 		Difficulty: difficulty,
+		Profile:    mutation.Profile,
 		Mutation:   mutation,
 		CreatedAt:  now,
 	}

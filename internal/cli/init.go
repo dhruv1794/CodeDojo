@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -7,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dhruvmishra/codedojo/internal/coach/anthropic"
 	"github.com/dhruvmishra/codedojo/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -54,8 +57,18 @@ func promptForConfig(cmd *cobra.Command, cfg config.Config) (config.Config, erro
 			return config.Config{}, err
 		}
 		cfg.Coach.APIKey = apiKey
+		modelDefault := cfg.Coach.Model
+		if modelDefault == "" {
+			modelDefault = anthropic.DefaultModel
+		}
+		model, err := promptString(in, out, "Anthropic model", modelDefault)
+		if err != nil {
+			return config.Config{}, err
+		}
+		cfg.Coach.Model = model
 	} else {
 		cfg.Coach.APIKey = ""
+		cfg.Coach.Model = ""
 	}
 
 	difficulty, err := promptInt(in, out, "Default difficulty", cfg.Defaults.Difficulty, 1, 5)
