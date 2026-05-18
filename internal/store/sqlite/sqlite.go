@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/dhruvmishra/codedojo/internal/session"
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 type Store struct {

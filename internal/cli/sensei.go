@@ -32,7 +32,7 @@ func newSenseiPublishCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "publish",
 		Short: "Publish a single authored reviewer kata pack",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runSenseiPublish(cmd.Context(), cmd, opts)
 		},
 	}
@@ -67,7 +67,7 @@ func newSenseiPlayCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "play",
 		Short: "Play an authored Sensei kata pack",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := runSenseiPlay(cmd.Context(), cmd, opts)
 			silenceUsageForProductError(cmd, err)
 			return err
@@ -99,7 +99,7 @@ func newSenseiInspectCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inspect",
 		Short: "Inspect an authored Sensei kata pack without running it",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runSenseiInspect(cmd, opts)
 		},
 	}
@@ -116,7 +116,7 @@ func newSenseiVetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "vet",
 		Short: "Validate that a Sensei kata pack is playable",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := runSenseiVet(cmd.Context(), cmd, opts)
 			var vetErr senseiVetFailedError
 			if errors.As(err, &vetErr) {

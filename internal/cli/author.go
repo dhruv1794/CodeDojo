@@ -27,7 +27,7 @@ func newAuthorPackCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pack",
 		Short: "Generate a curated reviewer mutation pack",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runAuthorPack(cmd.Context(), cmd, opts)
 		},
 	}
@@ -93,7 +93,7 @@ func writeAuthorPack(path string, pack author.Pack) error {
 		return fmt.Errorf("marshal author pack: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write author pack: %w", err)
 	}
 	return nil

@@ -26,7 +26,7 @@ func newServeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the local CodeDojo web UI",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runServe(cmd.Context(), cmd, serveOptions{
 				Repo:       repoPath,
 				Port:       port,

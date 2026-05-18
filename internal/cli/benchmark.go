@@ -28,7 +28,7 @@ func newBenchmarkRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run",
 		Short: "Run a curated mutation benchmark pack",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runBenchmark(cmd.Context(), cmd, opts)
 		},
 	}
@@ -81,7 +81,7 @@ func writeBenchmarkResults(path string, results benchmark.Results) error {
 		return fmt.Errorf("marshal benchmark results: %w", err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write benchmark results: %w", err)
 	}
 	return nil

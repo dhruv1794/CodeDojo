@@ -3,6 +3,7 @@
 package astop
 
 import (
+	"context"
 	"fmt"
 
 	sitter "github.com/smacker/go-tree-sitter"
@@ -52,7 +53,10 @@ func (RustOptionInvert) Difficulty() int  { return OptionPredicateOperator.Diffi
 func (RustOptionInvert) Candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
 	parser.SetLanguage(getRustLanguage())
-	tree := parser.Parse(nil, source)
+	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	if err != nil {
+		return nil
+	}
 	var sites []ASTSite
 	walk(tree.RootNode(), func(node *sitter.Node) bool {
 		if node.Type() != "call_expression" {
@@ -138,7 +142,10 @@ func (RustErrPropagation) Difficulty() int  { return 3 }
 func (RustErrPropagation) Candidates(source []byte) []ASTSite {
 	parser := sitter.NewParser()
 	parser.SetLanguage(getRustLanguage())
-	tree := parser.Parse(nil, source)
+	tree, err := parser.ParseCtx(context.Background(), nil, source)
+	if err != nil {
+		return nil
+	}
 	var sites []ASTSite
 	walk(tree.RootNode(), func(node *sitter.Node) bool {
 		if node.Type() != "try_expression" {

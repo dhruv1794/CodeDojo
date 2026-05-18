@@ -5,6 +5,7 @@ package docker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -173,7 +174,7 @@ func (s *Session) Exec(ctx context.Context, args []string) (sandbox.ExecResult, 
 	copyErr := make(chan error, 1)
 	go func() {
 		_, err := stdcopy.StdCopy(&stdout, &stderr, attached.Reader)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = nil
 		}
 		copyErr <- err
@@ -201,7 +202,7 @@ func (s *Session) WriteFile(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
 	}
-	if err := os.WriteFile(full, data, 0o644); err != nil {
+	if err := os.WriteFile(full, data, 0o600); err != nil {
 		return fmt.Errorf("write %q: %w", path, err)
 	}
 	return nil

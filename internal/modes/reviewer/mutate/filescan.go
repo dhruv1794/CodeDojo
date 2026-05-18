@@ -69,6 +69,7 @@ func DefaultRustScanConfig() ScanConfig {
 }
 
 func filesFromGitLog(ctx context.Context, repoPath string, logLimit int, cfg ScanConfig) ([]string, error) {
+	// #nosec G204 -- fixed git subcommand; arguments are an internal scan config, not user input.
 	cmd := exec.CommandContext(ctx, "git", "log", fmt.Sprintf("-%d", logLimit), "--name-only", "--pretty=format:", "--", cfg.GlobPattern)
 	cmd.Dir = repoPath
 	out, err := cmd.Output()

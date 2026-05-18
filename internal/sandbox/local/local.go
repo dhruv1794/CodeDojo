@@ -34,7 +34,7 @@ type Session struct {
 	closed  bool
 }
 
-func (Driver) Start(ctx context.Context, spec sandbox.Spec) (sandbox.Session, error) {
+func (Driver) Start(_ context.Context, spec sandbox.Spec) (sandbox.Session, error) {
 	if spec.Network != "" && spec.Network != sandbox.NetworkFull {
 		slog.Warn("local sandbox does not enforce network policy", "policy", spec.Network)
 	}
@@ -62,6 +62,7 @@ func (s *Session) Exec(ctx context.Context, args []string) (sandbox.ExecResult, 
 	if len(args) == 0 {
 		return sandbox.ExecResult{}, fmt.Errorf("command is required")
 	}
+	// #nosec G204 -- the sandbox runs the repository's configured test command by design.
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = s.workdir
 	cmd.WaitDelay = execWaitDelay
@@ -96,7 +97,7 @@ func (s *Session) WriteFile(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return fmt.Errorf("create parent directory: %w", err)
 	}
-	if err := os.WriteFile(full, data, 0o644); err != nil {
+	if err := os.WriteFile(full, data, 0o600); err != nil {
 		return fmt.Errorf("write %q: %w", path, err)
 	}
 	return nil

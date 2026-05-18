@@ -220,11 +220,11 @@ func (JSArrayBounds) Apply(content string, site Site) (string, error) {
 	arr := site.Metadata["arr"]
 	idx := site.Metadata["idx"]
 	old := fmt.Sprintf("%s[%s]", arr, idx)
-	new_ := fmt.Sprintf("%s[%s-1]", arr, idx)
+	replacement := fmt.Sprintf("%s[%s-1]", arr, idx)
 	replaced := false
 	newLine := strings.Map(func(r rune) rune { return r }, line)
 	if i := strings.Index(newLine, old); i >= 0 && !replaced {
-		newLine = newLine[:i] + new_ + newLine[i+len(old):]
+		newLine = newLine[:i] + replacement + newLine[i+len(old):]
 		replaced = true
 	}
 	_ = replaced
@@ -287,11 +287,11 @@ func (TSOptionalChain) Apply(content string, site Site) (string, error) {
 	}
 	obj := site.Metadata["obj"]
 	old := obj + "?."
-	new_ := obj + "."
+	replacement := obj + "."
 	replaced := false
 	line := lines[site.StartLine-1]
 	if i := strings.Index(line, old); i >= 0 && !replaced {
-		line = line[:i] + new_ + line[i+len(old):]
+		line = line[:i] + replacement + line[i+len(old):]
 		replaced = true
 	}
 	_ = replaced

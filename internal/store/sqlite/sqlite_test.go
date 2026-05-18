@@ -20,7 +20,7 @@ func TestOpenAppliesSchema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openTestStore(t, ctx)
+	store := openTestStore(ctx, t)
 
 	for _, table := range []string{"sessions", "events", "scores", "mutation_logs", "streaks"} {
 		t.Run(table, func(t *testing.T) {
@@ -40,7 +40,7 @@ func TestOpenEnablesWALForFileDatabase(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openTestStore(t, ctx)
+	store := openTestStore(ctx, t)
 
 	var mode string
 	if err := store.db.QueryRowContext(ctx, `PRAGMA journal_mode`).Scan(&mode); err != nil {
@@ -55,7 +55,7 @@ func TestMutationLogRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openTestStore(t, ctx)
+	store := openTestStore(ctx, t)
 	if err := store.CreateSession(ctx, session.Session{
 		ID:         "sess-mutation",
 		Mode:       session.ModeReviewer,
@@ -121,7 +121,7 @@ func TestStoreCRUDRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openTestStore(t, ctx)
+	store := openTestStore(ctx, t)
 	started := time.Date(2026, 4, 27, 10, 11, 12, 13, time.UTC)
 	created := time.Date(2026, 4, 27, 10, 12, 13, 14, time.UTC)
 	wantSession := session.Session{
@@ -209,7 +209,7 @@ func TestStatsAndStreakRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openTestStore(t, ctx)
+	store := openTestStore(ctx, t)
 	started := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
 	for _, sess := range []session.Session{
 		{ID: "review-1", Mode: session.ModeReviewer, Repo: "/repos/api", Task: "review", Score: 100, State: session.StateClosed, StartedAt: started},
@@ -318,7 +318,7 @@ func TestAppendEventConcurrent(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openTestStore(t, ctx)
+	store := openTestStore(ctx, t)
 	if err := store.CreateSession(ctx, session.Session{
 		ID:         "sess-concurrent",
 		Mode:       session.ModeReviewer,
@@ -384,7 +384,7 @@ func TestGetSessionMissingReturnsError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openTestStore(t, ctx)
+	store := openTestStore(ctx, t)
 
 	_, err := store.GetSession(ctx, "missing")
 	if err == nil {
@@ -395,7 +395,7 @@ func TestGetSessionMissingReturnsError(t *testing.T) {
 	}
 }
 
-func openTestStore(t *testing.T, ctx context.Context) *Store {
+func openTestStore(ctx context.Context, t *testing.T) *Store {
 	t.Helper()
 
 	store, err := Open(ctx, filepath.Join(t.TempDir(), "codedojo.db"))

@@ -58,11 +58,11 @@ func (e Engine) SelectAndApply(ctx context.Context, r repo.Repo, difficulty int)
 	if err := printer.Fprint(&formatted, fileSet, astFile); err != nil {
 		return MutationLog{}, fmt.Errorf("format mutated source: %w", err)
 	}
-	if err := os.WriteFile(full, formatted.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(full, formatted.Bytes(), 0o600); err != nil {
 		return MutationLog{}, fmt.Errorf("write mutated file: %w", err)
 	}
 	if _, err := RunGates(ctx, r.Path, e.GateCfg); err != nil {
-		os.WriteFile(full, before, 0o644)
+		_ = os.WriteFile(full, before, 0o600)
 		return MutationLog{}, fmt.Errorf("gates rejected mutation: %w", err)
 	}
 	now := e.now()
@@ -130,11 +130,11 @@ func (e Engine) SelectAndApplySameFlow(ctx context.Context, r repo.Repo, difficu
 	if err := printer.Fprint(&formatted, fileSet, astFile); err != nil {
 		return nil, fmt.Errorf("format compound mutated source: %w", err)
 	}
-	if err := os.WriteFile(full, formatted.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(full, formatted.Bytes(), 0o600); err != nil {
 		return nil, fmt.Errorf("write compound mutated file: %w", err)
 	}
 	if _, err := RunGates(ctx, r.Path, e.GateCfg); err != nil {
-		os.WriteFile(full, before, 0o644)
+		_ = os.WriteFile(full, before, 0o600)
 		return nil, fmt.Errorf("gates rejected compound mutation: %w", err)
 	}
 	now := e.now()

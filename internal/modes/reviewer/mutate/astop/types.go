@@ -44,11 +44,6 @@ func pointToLine(p sitter.Point) int {
 	return int(p.Row) + 1
 }
 
-// pointToColumn converts a tree-sitter Point to a 1-based column number.
-func pointToColumn(p sitter.Point) int {
-	return int(p.Column) + 1
-}
-
 // nodeText returns the source text within the node's byte range.
 func nodeText(source []byte, node *sitter.Node) string {
 	return string(source[node.StartByte():node.EndByte()])

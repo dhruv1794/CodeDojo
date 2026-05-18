@@ -26,7 +26,7 @@ func newRootCommand() *cobra.Command {
 		Use:           "codedojo",
 		Short:         "Deliberate practice for developers in the AI era",
 		SilenceErrors: true,
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRun: func(_ *cobra.Command, _ []string) {
 			level := slog.LevelInfo
 			if verbose {
 				level = slog.LevelDebug

@@ -67,7 +67,7 @@ func TestHintHappyPath(t *testing.T) {
 }
 
 func TestHintAPIErrorBubblesUp(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":"model is loading"}`))
 	}))
@@ -80,7 +80,7 @@ func TestHintAPIErrorBubblesUp(t *testing.T) {
 }
 
 func TestGradeParsesScoreAndFeedback(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		respond(w, chatResponse{
 			Message: chatMessage{Role: "assistant", Content: "42\nThe diagnosis names the right boundary class but misses the off-by-one."},
 		})
@@ -102,7 +102,7 @@ func TestGradeParsesScoreAndFeedback(t *testing.T) {
 
 func TestRetryWrapperValidatesOllamaHints(t *testing.T) {
 	calls := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls++
 		content := "```go\nfunc leaked() int {\n\treturn 1\n}\n```"
 		if calls == 2 {

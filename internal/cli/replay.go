@@ -345,7 +345,7 @@ func formatReplayDuration(d time.Duration) string {
 	seconds := int(d.Round(time.Second).Seconds())
 	hours := seconds / 3600
 	minutes := (seconds % 3600) / 60
-	seconds = seconds % 60
+	seconds %= 60
 	if hours > 0 {
 		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
 	}

@@ -22,7 +22,7 @@ func newLearnCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "learn",
 		Short: "Start newcomer mode",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts := learnOptions{
 				Repo:       repoPath,
 				Difficulty: difficulty,

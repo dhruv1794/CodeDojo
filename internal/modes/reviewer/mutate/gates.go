@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -217,7 +218,8 @@ func runCommand(ctx context.Context, dir string, name string, args ...string) (c
 	err := cmd.Run()
 	result := commandResult{stdout: stdout.String(), stderr: stderr.String()}
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			result.exitCode = exitErr.ExitCode()
 			return result, nil
 		}

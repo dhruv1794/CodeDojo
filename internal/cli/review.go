@@ -34,7 +34,7 @@ func newReviewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "review",
 		Short: "Start reviewer mode",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts := reviewOptions{
 				Repo:          repoPath,
 				Difficulty:    difficulty,

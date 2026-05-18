@@ -233,11 +233,12 @@ func (s *Service) Preflight(ctx context.Context, source string) (Preflight, erro
 	if preflight.Language != "" && preflight.Language != "unknown" {
 		scanCfg := scanConfigForLanguage(preflight.Language)
 		files, err := mutate.CandidateFiles(ctx, loaded.Path, 50, scanCfg)
-		if err != nil {
+		switch {
+		case err != nil:
 			preflight.Review = availabilityError(noReviewCandidatesError(err), 0)
-		} else if len(files) == 0 {
+		case len(files) == 0:
 			preflight.Review = availabilityError(noReviewCandidatesError(nil), 0)
-		} else {
+		default:
 			preflight.Review = availability(true, "", len(files))
 		}
 	}
@@ -414,7 +415,7 @@ func (s *Service) StartSensei(ctx context.Context, opts SenseiStartOptions) (*Li
 		return nil, fmt.Errorf("sensei task %q is missing mutated source snapshot", task.ID)
 	}
 	target := filepath.Join(loaded.Path, filepath.FromSlash(mutation.FilePath))
-	if err := os.WriteFile(target, []byte(mutation.Mutated), 0o644); err != nil {
+	if err := os.WriteFile(target, []byte(mutation.Mutated), 0o600); err != nil {
 		_ = os.RemoveAll(loaded.Path)
 		return nil, fmt.Errorf("write sensei mutation: %w", err)
 	}
@@ -1006,8 +1007,8 @@ func (s *Service) mistakeIndex(ctx context.Context) []OpStat {
 		return nil
 	}
 	out := make([]OpStat, 0, len(breakdown))
-	var lowestRate float64 = 1.0
-	var lowestIdx int = -1
+	lowestRate := 1.0
+	lowestIdx := -1
 	for i, b := range breakdown {
 		if b.SolveRate < lowestRate {
 			lowestRate = b.SolveRate

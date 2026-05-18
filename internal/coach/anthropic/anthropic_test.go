@@ -78,7 +78,7 @@ func TestHintRequiresAPIKey(t *testing.T) {
 }
 
 func TestHintAPIErrorBubblesUp(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"error":{"type":"rate_limit_error","message":"slow down"}}`))
 	}))
@@ -91,7 +91,7 @@ func TestHintAPIErrorBubblesUp(t *testing.T) {
 }
 
 func TestGradeParsesScoreAndFeedback(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		respond(w, messagesResponse{
 			Content: []contentBlock{{Type: "text", Text: "42\nThe diagnosis names the right boundary class but misses the off-by-one."}},
 			Usage:   apiUsage{InputTokens: 200, OutputTokens: 40},

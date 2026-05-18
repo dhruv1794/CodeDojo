@@ -4,6 +4,7 @@ package author
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -192,7 +193,7 @@ func vetTask(ctx context.Context, baseline vetBaseline, task PackTask, timeout t
 	}
 	check.BaselinePass = true
 	target := filepath.Join(workdir, filepath.FromSlash(task.FilePath))
-	if err := os.WriteFile(target, []byte(mutation.Mutated), 0o644); err != nil {
+	if err := os.WriteFile(target, []byte(mutation.Mutated), 0o600); err != nil {
 		check.Error = fmt.Sprintf("write mutated source: %v", err)
 		return check
 	}
@@ -232,13 +233,15 @@ func runTestCommand(ctx context.Context, dir string, args []string, timeout time
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	// #nosec G204 -- runs the repository's configured test command by design.
 	cmd := exec.CommandContext(runCtx, args[0], args[1:]...)
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
 		if runCtx.Err() != nil {
 			return -1, runCtx.Err()
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			return exitErr.ExitCode(), nil
 		}
 		return -1, err

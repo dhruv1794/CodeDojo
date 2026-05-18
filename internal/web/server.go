@@ -63,7 +63,7 @@ func (s *Server) routes(static http.FileSystem) {
 	s.mux.Handle("GET /", http.FileServer(static))
 }
 
-func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

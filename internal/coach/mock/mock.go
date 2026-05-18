@@ -15,7 +15,7 @@ type Coach struct {
 	LeakCode bool
 }
 
-func (c Coach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+func (c Coach) Hint(_ context.Context, req coach.HintRequest) (coach.Hint, error) {
 	if _, err := prompts.Render("reviewer/system.tmpl", map[string]any{
 		"Difficulty": req.Difficulty,
 		"HintBudget": req.HintBudget,
@@ -41,7 +41,7 @@ func (c Coach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, err
 	return coach.Hint{Level: req.Level, Content: content, Cost: coach.HintCost(req.Level)}, nil
 }
 
-func (c Coach) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+func (c Coach) Grade(_ context.Context, req coach.GradeRequest) (coach.Grade, error) {
 	if strings.Contains(strings.ToLower(req.Rubric), "after-action commentary") {
 		return coach.Grade{Feedback: "The mutation changed one focused behavior, so the useful read is to compare the failing symptom against the local invariant.\n\nCarry this forward as a review habit: name the invariant first, then verify the exact branch or boundary before editing."}, nil
 	}
