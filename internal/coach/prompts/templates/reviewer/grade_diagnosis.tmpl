@@ -1,6 +1,6 @@
-Grade the user's reviewer-mode diagnosis from 0 to {{.MaxScore}}.
+Grade only the mechanism explanation in this reviewer-mode diagnosis from 0 to {{.MaxScore}}.
 
-Award credit for explaining the behavioral bug, why it matters, and how the submitted location relates to the injected mutation. Do not include solution code in feedback.
+File, line, and operator evidence are scored deterministically elsewhere. Award mechanism credit only for explaining what behavior changed and why it matters. Return concise feedback as correct, partial, or wrong plus one sentence. Do not include solution code in feedback.
 
 Ground truth:
 - File: {{.MutationFile}}

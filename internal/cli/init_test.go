@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -7,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dhruvmishra/codedojo/internal/coach/anthropic"
 	"github.com/dhruvmishra/codedojo/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -36,7 +39,7 @@ func TestPromptForConfigUsesDefaults(t *testing.T) {
 
 func TestPromptForConfigAnthropic(t *testing.T) {
 	cmd := &cobra.Command{}
-	in := strings.NewReader("anthropic\nsk-test\n5\n")
+	in := strings.NewReader("anthropic\nsk-test\n\n5\n")
 	out := &bytes.Buffer{}
 	cmd.SetIn(in)
 	cmd.SetOut(out)
@@ -51,6 +54,9 @@ func TestPromptForConfigAnthropic(t *testing.T) {
 	}
 	if cfg.Coach.APIKey != "sk-test" {
 		t.Fatalf("api key = %q, want sk-test", cfg.Coach.APIKey)
+	}
+	if cfg.Coach.Model != anthropic.DefaultModel {
+		t.Fatalf("model = %q, want %q", cfg.Coach.Model, anthropic.DefaultModel)
 	}
 	if cfg.Defaults.Difficulty != 5 {
 		t.Fatalf("difficulty = %d, want 5", cfg.Defaults.Difficulty)
@@ -112,7 +118,7 @@ func TestInitCommandWritesConfig(t *testing.T) {
 	cfgFile = path
 
 	cmd := newInitCommand()
-	cmd.SetIn(strings.NewReader("anthropic\nsk-test\n4\n"))
+	cmd.SetIn(strings.NewReader("anthropic\nsk-test\nclaude-test-model\n4\n"))
 	out := &bytes.Buffer{}
 	cmd.SetOut(out)
 
@@ -127,7 +133,7 @@ func TestInitCommandWritesConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load written config: %v", err)
 	}
-	if cfg.Coach.Backend != "anthropic" || cfg.Coach.APIKey != "sk-test" || cfg.Defaults.Difficulty != 4 {
+	if cfg.Coach.Backend != "anthropic" || cfg.Coach.APIKey != "sk-test" || cfg.Coach.Model != "claude-test-model" || cfg.Defaults.Difficulty != 4 {
 		t.Fatalf("written config mismatch: %+v", cfg)
 	}
 }

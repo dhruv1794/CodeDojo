@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package sqlite
 
 import "github.com/dhruvmishra/codedojo/internal/modes/reviewer/mutate"

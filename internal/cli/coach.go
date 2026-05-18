@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -38,9 +40,17 @@ func newBackendCoach(cfg config.Config) (coach.Coach, error) {
 		if key == "" {
 			return nil, fmt.Errorf("anthropic backend selected but no API key (set ANTHROPIC_API_KEY or run codedojo init)")
 		}
-		return anthropic.New(key), nil
+		c := anthropic.New(key)
+		if cfg.Coach.Model != "" {
+			c.Model = cfg.Coach.Model
+		}
+		return c, nil
 	case "ollama":
-		c := ollama.New(os.Getenv("OLLAMA_MODEL"))
+		model := cfg.Coach.Model
+		if model == "" {
+			model = os.Getenv("OLLAMA_MODEL")
+		}
+		c := ollama.New(model)
 		if baseURL := os.Getenv("OLLAMA_BASE_URL"); baseURL != "" {
 			c.BaseURL = baseURL
 		}

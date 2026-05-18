@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package sqlite
 
 import (
@@ -31,6 +33,21 @@ func TestOpenAppliesSchema(t *testing.T) {
 				t.Fatalf("schema table = %q, want %q", name, table)
 			}
 		})
+	}
+}
+
+func TestOpenEnablesWALForFileDatabase(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t, ctx)
+
+	var mode string
+	if err := store.db.QueryRowContext(ctx, `PRAGMA journal_mode`).Scan(&mode); err != nil {
+		t.Fatalf("PRAGMA journal_mode: %v", err)
+	}
+	if mode != "wal" {
+		t.Fatalf("journal_mode = %q, want wal", mode)
 	}
 }
 
@@ -207,10 +224,52 @@ func TestStatsAndStreakRoundTrip(t *testing.T) {
 		ID:         "mut-1",
 		RepoPath:   "/repos/api",
 		Difficulty: 2,
-		Mutation:   mutate.Mutation{Operator: "boundary", FilePath: "a.go", StartLine: 1, EndLine: 1},
+		Profile:    mutate.ProfileDifficulty(mutate.Mutation{Operator: "boundary", StartLine: 1, EndLine: 1}),
+		Mutation:   mutate.Mutation{Operator: "boundary", FilePath: "a.go", StartLine: 1, EndLine: 1, Profile: mutate.ProfileDifficulty(mutate.Mutation{Operator: "boundary", StartLine: 1, EndLine: 1})},
 		CreatedAt:  started,
 	}); err != nil {
 		t.Fatalf("SaveMutationLog() error = %v", err)
+	}
+	if err := store.SaveMutationLog(ctx, "review-2", mutate.MutationLog{
+		ID:         "mut-2",
+		RepoPath:   "/repos/api",
+		Difficulty: 3,
+		Profile:    mutate.ProfileDifficulty(mutate.Mutation{Operator: "errordrop", StartLine: 10, EndLine: 14}),
+		Mutation:   mutate.Mutation{Operator: "errordrop", FilePath: "b.go", StartLine: 10, EndLine: 14, Profile: mutate.ProfileDifficulty(mutate.Mutation{Operator: "errordrop", StartLine: 10, EndLine: 14})},
+		CreatedAt:  started.Add(time.Minute),
+	}); err != nil {
+		t.Fatalf("SaveMutationLog() error = %v", err)
+	}
+	if err := store.AppendEvent(ctx, session.Event{SessionID: "review-1", Type: session.EventGrade, Payload: "score=100", CreatedAt: started.Add(5 * time.Minute)}); err != nil {
+		t.Fatalf("AppendEvent() error = %v", err)
+	}
+	if err := store.AppendEvent(ctx, session.Event{SessionID: "review-2", Type: session.EventGrade, Payload: "score=50", CreatedAt: started.Add(9 * time.Minute)}); err != nil {
+		t.Fatalf("AppendEvent() error = %v", err)
+	}
+	if err := store.SaveCoachUsage(ctx, CoachUsage{
+		SessionID:                "review-1",
+		Backend:                  "anthropic",
+		Model:                    "claude-sonnet-4-20250514",
+		Operation:                "hint",
+		InputTokens:              100,
+		OutputTokens:             20,
+		CacheCreationInputTokens: 50,
+		CostUSD:                  0.001,
+		CreatedAt:                started,
+	}); err != nil {
+		t.Fatalf("SaveCoachUsage() error = %v", err)
+	}
+	if err := store.SaveCoachUsage(ctx, CoachUsage{
+		SessionID:    "review-2",
+		Backend:      "anthropic",
+		Model:        "claude-sonnet-4-20250514",
+		Operation:    "grade",
+		InputTokens:  200,
+		OutputTokens: 40,
+		CostUSD:      0.002,
+		CreatedAt:    started.Add(2 * 24 * time.Hour),
+	}); err != nil {
+		t.Fatalf("SaveCoachUsage() error = %v", err)
 	}
 	if streak, err := store.RecordStreakResult(ctx, true); err != nil || streak.Current != 1 || streak.Best != 1 {
 		t.Fatalf("RecordStreakResult(true) = %+v, %v; want 1/1", streak, err)
@@ -229,9 +288,30 @@ func TestStatsAndStreakRoundTrip(t *testing.T) {
 	if stats.Total != 3 || stats.Graded != 2 || stats.Best != 100 || stats.Streak.Current != 0 || stats.Streak.Best != 2 {
 		t.Fatalf("Stats() = %+v, want totals 3/2 best 100 streak 0/2", stats)
 	}
-	if len(stats.ByOp) != 1 || stats.ByOp[0].Name != "boundary" || stats.ByOp[0].Count != 1 {
-		t.Fatalf("ByOp = %+v, want one boundary row", stats.ByOp)
+	if len(stats.ByOp) != 2 {
+		t.Fatalf("ByOp = %+v, want two operator rows", stats.ByOp)
 	}
+	if stats.Recommendation.Name == "" {
+		t.Fatalf("Recommendation is empty: %+v", stats)
+	}
+	if !hasEngagementStat(stats.Engagement, "operator", "boundary") || !hasEngagementStat(stats.Engagement, "profile", "subtlety high") {
+		t.Fatalf("Engagement = %+v, want operator and profile rows", stats.Engagement)
+	}
+	if stats.Cost.Calls != 2 || stats.Cost.InputTokens != 300 || stats.Cost.OutputTokens != 60 || stats.Cost.CacheTokens != 50 {
+		t.Fatalf("Cost = %+v, want token totals", stats.Cost)
+	}
+	if stats.Cost.TotalUSD != 0.003 || stats.Cost.TokensPerHint != 170 {
+		t.Fatalf("Cost = %+v, want cost totals and hint tokens", stats.Cost)
+	}
+}
+
+func hasEngagementStat(stats []EngagementStat, kind, name string) bool {
+	for _, stat := range stats {
+		if stat.Kind == kind && stat.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestAppendEventConcurrent(t *testing.T) {

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package cli
 
 import (
@@ -6,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/dhruvmishra/codedojo/internal/app"
@@ -19,6 +22,7 @@ func newServeCommand() *cobra.Command {
 	var port int
 	var difficulty int
 	var budget int
+	var allowSSH bool
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the local CodeDojo web UI",
@@ -28,6 +32,7 @@ func newServeCommand() *cobra.Command {
 				Port:       port,
 				Difficulty: difficulty,
 				Budget:     budget,
+				AllowSSH:   allowSSH,
 			})
 		},
 	}
@@ -35,6 +40,7 @@ func newServeCommand() *cobra.Command {
 	cmd.Flags().IntVar(&port, "port", 0, "port for the local web server; 0 picks an available port")
 	cmd.Flags().IntVar(&difficulty, "difficulty", 0, "default task difficulty from 1 to 5")
 	cmd.Flags().IntVar(&budget, "budget", 0, "default hint count budget")
+	cmd.Flags().BoolVar(&allowSSH, "allow-ssh", false, "allow the web UI to clone SSH repositories using discovered local SSH keys")
 	return cmd
 }
 
@@ -43,6 +49,7 @@ type serveOptions struct {
 	Port       int
 	Difficulty int
 	Budget     int
+	AllowSSH   bool
 }
 
 func runServe(ctx context.Context, cmd *cobra.Command, opts serveOptions) error {
@@ -62,6 +69,7 @@ func runServe(ctx context.Context, cmd *cobra.Command, opts serveOptions) error 
 	if err != nil {
 		return err
 	}
+	service.SetSSHAuthAllowed(opts.AllowSSH)
 	defer service.Close()
 
 	handler, err := web.New(service)
@@ -76,7 +84,7 @@ func runServe(ctx context.Context, cmd *cobra.Command, opts serveOptions) error 
 	defer listener.Close()
 
 	server := &http.Server{
-		Handler:           withDefaultRepo(handler, opts.Repo),
+		Handler:           localRequestGuard(withDefaultRepo(handler, opts.Repo), listener.Addr().String()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	errCh := make(chan error, 1)
@@ -119,4 +127,52 @@ func withDefaultRepo(next http.Handler, repoPath string) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func localRequestGuard(next http.Handler, listenAddr string) http.Handler {
+	_, port, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		port = ""
+	}
+	allowedHosts := map[string]bool{
+		listenAddr: true,
+	}
+	if port != "" {
+		allowedHosts["127.0.0.1:"+port] = true
+		allowedHosts["localhost:"+port] = true
+	}
+	allowedOrigins := map[string]bool{}
+	for host := range allowedHosts {
+		allowedOrigins["http://"+host] = true
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !allowedHosts[r.Host] {
+			http.Error(w, "invalid host", http.StatusForbidden)
+			return
+		}
+		if !sameLocalOrigin(r.Header.Get("Origin"), allowedOrigins) ||
+			!sameLocalOrigin(refererOrigin(r.Header.Get("Referer")), allowedOrigins) {
+			http.Error(w, "invalid origin", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func sameLocalOrigin(origin string, allowed map[string]bool) bool {
+	if origin == "" {
+		return true
+	}
+	return allowed[origin]
+}
+
+func refererOrigin(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "invalid"
+	}
+	return parsed.Scheme + "://" + parsed.Host
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package newcomer
 
 import (
@@ -27,6 +29,7 @@ type Task struct {
 	GroundTruthSHA     string
 	StartingSHA        string
 	ReferenceDiff      string
+	CommitRange        string
 	Candidate          history.CommitCandidate
 	BannedIdentifiers  []string
 	Instructions       string
@@ -52,6 +55,7 @@ type Summarizer interface {
 type TaskGenerator struct {
 	Summarizer Summarizer
 	ScanLimit  int
+	Range      history.CommitRange
 }
 
 type DeterministicSummarizer struct{}
@@ -70,7 +74,7 @@ func (g TaskGenerator) GenerateTask(ctx context.Context, r repo.Repo, difficulty
 	if limit <= 0 {
 		limit = defaultTaskScanLimit
 	}
-	candidates, err := history.Scan(ctx, r, limit)
+	candidates, err := history.ScanWithOptions(ctx, r, history.ScanOptions{Limit: limit, Range: g.Range})
 	if err != nil {
 		return Task{}, err
 	}
@@ -108,6 +112,7 @@ func (g TaskGenerator) GenerateTask(ctx context.Context, r repo.Repo, difficulty
 		GroundTruthSHA:     state.GroundTruthSHA,
 		StartingSHA:        state.StartingSHA,
 		ReferenceDiff:      state.ReferenceDiff,
+		CommitRange:        g.Range.String(),
 		Candidate:          candidate,
 		BannedIdentifiers:  banned,
 		Instructions:       "Reimplement the described behavior, then submit when the original tests pass.",
@@ -430,8 +435,8 @@ var commonWords = map[string]bool{
 	// High-frequency identifier stems that block natural descriptions
 	"error": true, "result": true, "value": true, "count": true, "index": true,
 	"limit": true, "total": true, "input": true, "output": true, "check": true,
-	"start": true, "stop":  true, "close": true, "open":  true, "read": true,
-	"write": true, "send":  true, "handle": true, "process": true, "create": true,
+	"start": true, "stop": true, "close": true, "open": true, "read": true,
+	"write": true, "send": true, "handle": true, "process": true, "create": true,
 	"update": true, "delete": true, "remove": true, "insert": true, "load": true,
 	"save": true, "parse": true, "format": true, "print": true, "build": true,
 	"fetch": true, "apply": true, "reset": true, "clear": true, "flush": true,

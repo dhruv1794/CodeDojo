@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package ollama implements the coach.Coach interface against a local
 // Ollama HTTP server.
 package ollama

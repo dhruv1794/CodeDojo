@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package anthropic
 
 import (
@@ -112,18 +114,22 @@ func TestGradeParsesScoreAndFeedback(t *testing.T) {
 
 func TestParseGradeEdgeCases(t *testing.T) {
 	cases := []struct {
-		body  string
-		score int
+		body     string
+		score    int
+		feedback string
 	}{
-		{"", 0},
-		{"  100  ", 100},
-		{"7\nReason here.", 7},
-		{"score=12: text", 0},
+		{"", 0, ""},
+		{"  100  ", 100, "(no feedback)"},
+		{"7\nReason here.", 7, "Reason here."},
+		{"score=12: text", 0, "(no feedback)"},
 	}
 	for _, tc := range cases {
-		got, _ := parseGrade(tc.body)
+		got, feedback := parseGrade(tc.body)
 		if got != tc.score {
 			t.Errorf("parseGrade(%q) score=%d want %d", tc.body, got, tc.score)
+		}
+		if feedback != tc.feedback {
+			t.Errorf("parseGrade(%q) feedback=%q want %q", tc.body, feedback, tc.feedback)
 		}
 	}
 }
@@ -132,12 +138,13 @@ func TestCostMath(t *testing.T) {
 	c := New("k")
 	c.recordUsage(apiUsage{InputTokens: 1_000_000, OutputTokens: 0})
 	got := c.Cost()
-	want := DefaultPricing.InputPerM
+	defaultPricing := DefaultPricing()
+	want := defaultPricing.InputPerM
 	if got != want {
 		t.Errorf("Cost: got %f want %f", got, want)
 	}
 	c.recordUsage(apiUsage{OutputTokens: 1_000_000})
-	if c.Cost() != DefaultPricing.InputPerM+DefaultPricing.OutputPerM {
+	if c.Cost() != defaultPricing.InputPerM+defaultPricing.OutputPerM {
 		t.Errorf("Cost after output: %f", c.Cost())
 	}
 }

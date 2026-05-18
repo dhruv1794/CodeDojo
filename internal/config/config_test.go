@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package config
 
 import (
@@ -27,6 +29,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		Coach: CoachConfig{
 			Backend: "anthropic",
 			APIKey:  "sk-test",
+			Model:   "claude-sonnet-4-20250514",
 		},
 		Defaults: Defaults{
 			Difficulty: 5,

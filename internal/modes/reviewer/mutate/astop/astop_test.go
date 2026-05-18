@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package astop
 
 import (
@@ -20,6 +22,11 @@ func TestRustBoundary(t *testing.T) {
 			name: "gt to geq",
 			src:  "fn check(x: i32) -> bool {\n    x > 0\n}\n",
 			want: "fn check(x: i32) -> bool {\n    x >= 0\n}\n",
+		},
+		{
+			name: "leq to lt",
+			src:  "fn clamp(x: i32) -> i32 {\n    if x <= 5 {\n        return 5;\n    }\n    x\n}\n",
+			want: "fn clamp(x: i32) -> i32 {\n    if x < 5 {\n        return 5;\n    }\n    x\n}\n",
 		},
 	}
 	for _, tc := range cases {
@@ -154,6 +161,42 @@ func TestJSBoundary(t *testing.T) {
 	}
 }
 
+func TestJSBoundaryUsesAbstractReplacement(t *testing.T) {
+	src := "if (x >= 5) {\n  return true;\n}\n"
+	sites := JSBoundary{}.Candidates([]byte(src))
+	if len(sites) == 0 {
+		t.Fatal("expected at least one candidate for >=")
+	}
+	if sites[0].Metadata["from"] != ">=" || sites[0].Metadata["to"] != ">" {
+		t.Fatalf("replacement metadata = %+v, want >= to >", sites[0].Metadata)
+	}
+	got, err := JSBoundary{}.Apply([]byte(src), sites[0])
+	if err != nil {
+		t.Fatalf("Apply error: %v", err)
+	}
+	if !strings.Contains(string(got), "x > 5") {
+		t.Fatalf("expected boundary flip to >, got: %q", string(got))
+	}
+}
+
+func TestJSStrictEquality(t *testing.T) {
+	src := "if (user.id === input.id) {\n  return true;\n}\nif (kind !== expected) {\n  return false;\n}\n"
+	sites := JSStrictEquality{}.Candidates([]byte(src))
+	if len(sites) != 2 {
+		t.Fatalf("Candidates len = %d, want 2", len(sites))
+	}
+	if sites[0].Metadata["from"] != "===" || sites[0].Metadata["to"] != "==" {
+		t.Fatalf("first replacement metadata = %+v, want === to ==", sites[0].Metadata)
+	}
+	got, err := JSStrictEquality{}.Apply([]byte(src), sites[0])
+	if err != nil {
+		t.Fatalf("Apply error: %v", err)
+	}
+	if !strings.Contains(string(got), "user.id == input.id") || strings.Contains(string(got), "user.id === input.id") {
+		t.Fatalf("expected strict equality weakened, got: %q", string(got))
+	}
+}
+
 func TestJSConditionalInsertBang(t *testing.T) {
 	src := "if (isValid) {\n  proceed();\n}\n"
 	sites := JSConditional{}.Candidates([]byte(src))
@@ -251,14 +294,32 @@ func TestAllRustRegistrySize(t *testing.T) {
 }
 
 func TestAllJSRegistrySize(t *testing.T) {
-	if len(AllJS()) != 4 {
-		t.Fatalf("AllJS() len = %d, want 4", len(AllJS()))
+	if len(AllJS()) != 5 {
+		t.Fatalf("AllJS() len = %d, want 5", len(AllJS()))
 	}
 }
 
 func TestAllTSRegistrySize(t *testing.T) {
-	if len(AllTS()) != 6 {
-		t.Fatalf("AllTS() len = %d, want 6", len(AllTS()))
+	if len(AllTS()) != 7 {
+		t.Fatalf("AllTS() len = %d, want 7", len(AllTS()))
+	}
+}
+
+func TestOperatorDefinitionsAreAbstractAndValid(t *testing.T) {
+	if err := ensureOperatorDefinitions(BoundaryOperator, OptionPredicateOperator, RangeBoundOperator, StrictEqualityOperator); err != nil {
+		t.Fatal(err)
+	}
+	if BoundaryOperator.Intent != "change relational operator at clamp/range check" {
+		t.Fatalf("BoundaryOperator intent = %q", BoundaryOperator.Intent)
+	}
+	if got, ok := replacementFor(OptionPredicateOperator, "is_ok"); !ok || got != "is_err" {
+		t.Fatalf("option replacement = %q, %v; want is_err, true", got, ok)
+	}
+	if (JSBoundary{}).Name() != languageOperatorName("js", BoundaryOperator) {
+		t.Fatalf("JSBoundary name = %q, want language-scoped abstract operator name", (JSBoundary{}).Name())
+	}
+	if (JSStrictEquality{}).Name() != languageOperatorName("js", StrictEqualityOperator) {
+		t.Fatalf("JSStrictEquality name = %q, want language-scoped abstract operator name", (JSStrictEquality{}).Name())
 	}
 }
 

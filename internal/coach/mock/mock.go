@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: MIT
+
 package mock
 
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/dhruvmishra/codedojo/internal/coach"
 	"github.com/dhruvmishra/codedojo/internal/coach/prompts"
@@ -39,6 +42,9 @@ func (c Coach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, err
 }
 
 func (c Coach) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+	if strings.Contains(strings.ToLower(req.Rubric), "after-action commentary") {
+		return coach.Grade{Feedback: "The mutation changed one focused behavior, so the useful read is to compare the failing symptom against the local invariant.\n\nCarry this forward as a review habit: name the invariant first, then verify the exact branch or boundary before editing."}, nil
+	}
 	if _, err := prompts.Render("reviewer/grade_diagnosis.tmpl", map[string]any{
 		"MaxScore":     50,
 		"MutationFile": "unknown",

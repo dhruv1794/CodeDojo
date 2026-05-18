@@ -638,13 +638,13 @@
 <section id="modes" class="section fade-in">
   <div class="slabel">Practice</div>
   <h2>Two modes, one engine.</h2>
-  <p class="sintro">Both modes run against real code — your code — with a Socratic AI coach that refuses to give answers.</p>
+  <p class="sintro">Both modes run against real code — your code — with a validator-gated Socratic AI coach.</p>
   <div class="modes-grid">
     <div class="mode-card learn">
       <div class="mbadge">Learn mode</div>
       <h3>Newcomer</h3>
       <p>CodeDojo reverts a real feature commit from your repo's history. You get a stripped feature description with implementation details removed. Your job: reimplement it until the original tests pass.</p>
-      <p>The coach offers Socratic hints — reflective questions, file pointers, conceptual nudges — but never the answer. Every hint costs score.</p>
+      <p>The coach offers validator-gated Socratic hints — reflective questions, file pointers, conceptual nudges — and every scored hint costs score.</p>
       <div class="mode-meta">
         <div>
           <div class="mmeta-label">Who it's for</div>
@@ -697,7 +697,7 @@
 <section class="section fade-in">
   <div class="slabel">Scoring</div>
   <h2>Deterministic grading by default.</h2>
-  <p class="sintro">Test results and mutation logs are computed facts. LLM grading only layers on top for nuance — approach quality and diagnosis depth.</p>
+  <p class="sintro">Test results and mutation logs are computed facts. Reviewer diagnosis grading extracts concrete evidence deterministically; LLM grading is bounded to cached mechanism judgment and newcomer approach quality.</p>
   <div class="score-grid">
     <table class="score">
       <caption>Reviewer score</caption>
@@ -706,7 +706,7 @@
         <tr><td>Correct file identified</td><td>+50</td></tr>
         <tr><td>Line within &plusmn;2</td><td>+30</td></tr>
         <tr><td>Correct operator class</td><td>+20</td></tr>
-        <tr><td>Diagnosis quality (coach)</td><td>0 – 50</td></tr>
+        <tr><td>Diagnosis evidence + mechanism</td><td>0 – 50</td></tr>
         <tr><td>Time bonus (fast solve)</td><td>+25</td></tr>
         <tr><td>Streak multiplier</td><td>&times;N</td></tr>
         <tr><td>Hint deductions</td><td>&minus;10 to &minus;30</td></tr>
@@ -927,7 +927,8 @@ submit                   <span class="cc"># grade it</span></pre>
   --port 8080
 
 <span class="cc"># opens at http://localhost:8080</span>
-<span class="cc"># complete sessions in the browser;</span>
+<span class="cc"># use the repo browser, recent repos,</span>
+<span class="cc"># breadcrumbs, or direct path jump;</span>
 <span class="cc"># no account or cloud service</span>
 
 ./bin/codedojo status   <span class="cc"># past sessions</span>

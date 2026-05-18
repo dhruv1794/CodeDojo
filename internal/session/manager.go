@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package session
 
 import (
@@ -67,8 +69,10 @@ func (m Manager) RequestHint(ctx context.Context, sessionID string, level coach.
 	if err := m.Store.AppendEvent(ctx, Event{SessionID: sessionID, Type: EventHint, Payload: hint.Content}); err != nil {
 		return coach.Hint{}, err
 	}
-	if err := m.Store.IncrementHintsUsed(ctx, sessionID); err != nil {
-		return coach.Hint{}, err
+	if hint.Cost > 0 {
+		if err := m.Store.IncrementHintsUsed(ctx, sessionID); err != nil {
+			return coach.Hint{}, err
+		}
 	}
 	return hint, nil
 }

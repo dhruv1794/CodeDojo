@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package session_test
 
 import (
@@ -150,6 +152,42 @@ func TestManagerSubmitRejectsInvalidTransitions(t *testing.T) {
 	}
 }
 
+func TestManagerRequestHintDoesNotCountZeroCostFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := memory.New()
+	if err := store.CreateSession(ctx, session.Session{ID: "sess-free", State: session.StateRunning}); err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	manager := session.Manager{
+		Coach: zeroCostCoach{},
+		Store: store,
+	}
+
+	hint, err := manager.RequestHint(ctx, "sess-free", coach.LevelConcept, "failing path", "Go", 3, 1)
+	if err != nil {
+		t.Fatalf("RequestHint() error = %v", err)
+	}
+	if hint.Cost != 0 {
+		t.Fatalf("hint cost = %d, want 0", hint.Cost)
+	}
+	sess, err := store.GetSession(ctx, "sess-free")
+	if err != nil {
+		t.Fatalf("GetSession() error = %v", err)
+	}
+	if sess.HintsUsed != 0 {
+		t.Fatalf("HintsUsed = %d, want 0", sess.HintsUsed)
+	}
+	events, err := store.ListEvents(ctx, "sess-free")
+	if err != nil {
+		t.Fatalf("ListEvents() error = %v", err)
+	}
+	if len(events) != 1 || events[0].Type != session.EventHint {
+		t.Fatalf("events = %#v, want one hint event", events)
+	}
+}
+
 func TestManagerCloseRejectsClosedSession(t *testing.T) {
 	t.Parallel()
 
@@ -236,6 +274,16 @@ func (s *recordingSandbox) Diff() (string, error) {
 func (s *recordingSandbox) Close() error {
 	s.closed = true
 	return nil
+}
+
+type zeroCostCoach struct{}
+
+func (zeroCostCoach) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+	return coach.Hint{Level: req.Level, Content: "I cannot give a more specific hint.", Cost: 0}, nil
+}
+
+func (zeroCostCoach) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+	return coach.Grade{}, nil
 }
 
 func eventTypesToStrings(types []session.EventType) []string {

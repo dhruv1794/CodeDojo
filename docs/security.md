@@ -80,7 +80,11 @@ CodeDojo avoids modifying the original local repository path. `repo.OpenLocal` c
 
 Sandbox `ReadFile` and `WriteFile` methods reject non-local paths using `filepath.IsLocal`, so direct REPL file operations cannot use absolute paths or `..` escapes. This guard applies to CodeDojo file helper methods, not to arbitrary commands run inside the sandbox.
 
-Important limitation: repository copy currently preserves symlinks. A malicious repository can contain symlinks that point outside the workspace. The Docker driver limits the impact because only the temporary workspace is mounted, but the local driver runs on the host and should not be used for untrusted symlink-heavy repositories.
+Repository copy rejects symlinks that resolve outside the source repository. Symlinks that resolve inside the source repository are copied as relative links pointing at the copied target.
+
+The web repository browser is stricter during selection. It labels symlinked directories but does not traverse them, and direct browse requests to a symlink path are rejected. Choose the symlink's real target path when you intentionally want that repository.
+
+The `.codedojo/` directory is reserved for CodeDojo runtime metadata in practice copies. Do not store project configuration there; use the root-level `.codedojo.yaml` file for repository overrides.
 
 ## Network Policy
 
@@ -111,7 +115,16 @@ Avoid placing secrets in practice repositories. CodeDojo copies the repository c
 Coach backend secrets:
 
 - Anthropic uses the config API key or `ANTHROPIC_API_KEY`
-- Ollama can use `OLLAMA_MODEL` and `OLLAMA_BASE_URL`
+- Anthropic model selection is read from `coach.model` in config; the built-in default is a dated snapshot model ID.
+- Ollama can use `coach.model`, `OLLAMA_MODEL`, and `OLLAMA_BASE_URL`
+
+Remote repository authentication:
+
+- CLI `review` and `learn` commands use standard environment auth hints, including `GITHUB_TOKEN`, `GIT_ASKPASS`, and discovered local SSH keys.
+- `codedojo serve` accepts pasted Git URLs and `?repo=` links in the web UI. The browser must use **Open in CodeDojo** before the server clones and inspects a remote repository.
+- Sensei packs are local JSON manifests that point back to a source repository path or URL and include saved source snapshots. Only open packs from trusted teammates, because starting a Sensei kata clones or copies that source and runs its configured tests in the selected sandbox.
+- `codedojo serve` does not use discovered SSH keys for web-submitted clone URLs unless started with `--allow-ssh`.
+- Prefer HTTPS URLs with scoped tokens for web UI use. Use `--allow-ssh` only when you trust local browser access to the server.
 
 Docker sandbox commands do not receive arbitrary host environment variables by default; the driver sets a small workspace-specific environment. Local sandbox commands inherit the process environment through Go's default command behavior when no explicit environment is set, so local mode can expose host environment variables to untrusted commands.
 
@@ -154,7 +167,6 @@ Known follow-up work:
 
 - document a formal private vulnerability reporting address before public launch
 - make local mode opt-in for non-test CLI use
-- add symlink policy checks during repository copy
 - add image provenance and digest pinning for sandbox images
 - add optional Docker seccomp/AppArmor profiles
 - add allowlist-based restricted networking if `NetworkRestricted` is exposed to users

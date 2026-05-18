@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package mutate
 
 import (
@@ -7,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 )
 
@@ -158,13 +161,10 @@ func parsePytestSummary(output string) (passed, failed int, ok bool) {
 	scanner := bufio.NewScanner(bytes.NewBufferString(output))
 	for scanner.Scan() {
 		line := scanner.Text()
-		var p, f int
-		if n, _ := fmt.Sscanf(line, "%d passed", &p); n == 1 {
-			fmt.Sscanf(line, "%d passed, %d failed", &p, &f)
+		p, pOK := firstSummaryCount(pytestPassedPattern, line)
+		f, fOK := firstSummaryCount(pytestFailedPattern, line)
+		if pOK || fOK {
 			return p, f, true
-		}
-		if n, _ := fmt.Sscanf(line, "%d failed", &f); n == 1 {
-			return 0, f, true
 		}
 	}
 	return 0, 0, false
@@ -174,15 +174,32 @@ func parseCargoSummary(output string) (passed, failed int, ok bool) {
 	scanner := bufio.NewScanner(bytes.NewBufferString(output))
 	for scanner.Scan() {
 		line := scanner.Text()
-		var p, f int
 		if strings.Contains(line, "test result:") {
-			fmt.Sscanf(line, "test result: %*s. %d passed; %d failed", &p, &f)
+			p, _ := firstSummaryCount(cargoPassedPattern, line)
+			f, _ := firstSummaryCount(cargoFailedPattern, line)
 			return p, f, true
 		}
-		_ = p
-		_ = f
 	}
 	return 0, 0, false
+}
+
+var (
+	pytestPassedPattern = regexp.MustCompile(`\b(\d+)\s+passed\b`)
+	pytestFailedPattern = regexp.MustCompile(`\b(\d+)\s+failed\b`)
+	cargoPassedPattern  = regexp.MustCompile(`\b(\d+)\s+passed\b`)
+	cargoFailedPattern  = regexp.MustCompile(`\b(\d+)\s+failed\b`)
+)
+
+func firstSummaryCount(pattern *regexp.Regexp, line string) (int, bool) {
+	match := pattern.FindStringSubmatch(line)
+	if len(match) != 2 {
+		return 0, false
+	}
+	var count int
+	if _, err := fmt.Sscanf(match[1], "%d", &count); err != nil {
+		return 0, false
+	}
+	return count, true
 }
 
 type commandResult struct {

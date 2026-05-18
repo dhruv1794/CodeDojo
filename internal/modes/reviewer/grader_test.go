@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package reviewer
 
 import (
@@ -29,13 +31,13 @@ func TestGradeDetectionPartialCredit(t *testing.T) {
 				StartLine:     10,
 				EndLine:       10,
 				OperatorClass: "boundary",
-				Diagnosis:     "The boundary was widened so the minimum case returns too early.",
+				Diagnosis:     "calc/calc.go line 10 has a boundary comparison change so the minimum case returns too early.",
 			},
 			wantFile:      50,
 			wantLine:      30,
 			wantOperator:  20,
-			wantDiagnosis: 40,
-			wantScore:     140,
+			wantDiagnosis: 50,
+			wantScore:     150,
 		},
 		{
 			name: "line tolerance",
@@ -43,13 +45,13 @@ func TestGradeDetectionPartialCredit(t *testing.T) {
 				FilePath:      "calc/calc.go",
 				StartLine:     12,
 				OperatorClass: "boundary",
-				Diagnosis:     "The comparison boundary changed.",
+				Diagnosis:     "calc.go line 12 has a comparison boundary change.",
 			},
 			wantFile:      50,
 			wantLine:      30,
 			wantOperator:  20,
-			wantDiagnosis: 40,
-			wantScore:     140,
+			wantDiagnosis: 50,
+			wantScore:     150,
 		},
 		{
 			name: "wrong file but right line and operator",
@@ -57,12 +59,12 @@ func TestGradeDetectionPartialCredit(t *testing.T) {
 				FilePath:      "calc/other.go",
 				StartLine:     10,
 				OperatorClass: "boundary",
-				Diagnosis:     "The comparison boundary changed.",
+				Diagnosis:     "calc/calc.go line 10 has a comparison boundary change.",
 			},
 			wantLine:      30,
 			wantOperator:  20,
-			wantDiagnosis: 40,
-			wantScore:     90,
+			wantDiagnosis: 50,
+			wantScore:     100,
 		},
 		{
 			name: "wrong line and operator",
@@ -70,11 +72,11 @@ func TestGradeDetectionPartialCredit(t *testing.T) {
 				FilePath:      "calc/calc.go",
 				StartLine:     20,
 				OperatorClass: "conditional",
-				Diagnosis:     "The comparison boundary changed.",
+				Diagnosis:     "calc/calc.go line 10 has a comparison boundary change.",
 			},
 			wantFile:      50,
-			wantDiagnosis: 40,
-			wantScore:     90,
+			wantDiagnosis: 50,
+			wantScore:     100,
 		},
 		{
 			name: "empty diagnosis",
@@ -109,13 +111,13 @@ func TestGradeAppliesDeductionsTimeBonusAndStreak(t *testing.T) {
 		FilePath:      "calc/calc.go",
 		StartLine:     10,
 		OperatorClass: "boundary",
-		Diagnosis:     "The boundary was widened.",
+		Diagnosis:     "calc/calc.go line 10 has a boundary comparison changed at the lower guard branch.",
 		HintCosts:     []int{10, 20, -5},
 		StartedAt:     started,
 		SubmittedAt:   started.Add(6 * time.Minute),
 		Streak:        3,
 	}, reviewerLog(), GradeOptions{
-		Coach:          scriptedGrader{score: 45},
+		Coach:          scriptedGrader{score: 20},
 		TimeBonusLimit: 10 * time.Minute,
 	})
 	if err != nil {
@@ -127,11 +129,11 @@ func TestGradeAppliesDeductionsTimeBonusAndStreak(t *testing.T) {
 	if got.TimeBonus != 10 {
 		t.Fatalf("TimeBonus = %d, want 10", got.TimeBonus)
 	}
-	if got.StreakBonus != 18 {
-		t.Fatalf("StreakBonus = %d, want 18", got.StreakBonus)
+	if got.StreakBonus != 19 {
+		t.Fatalf("StreakBonus = %d, want 19", got.StreakBonus)
 	}
-	if got.Score != 143 {
-		t.Fatalf("Score = %d, want 143", got.Score)
+	if got.Score != 149 {
+		t.Fatalf("Score = %d, want 149", got.Score)
 	}
 }
 
@@ -140,7 +142,7 @@ func TestGradeClampsDiagnosisScore(t *testing.T) {
 		FilePath:      "calc/calc.go",
 		StartLine:     10,
 		OperatorClass: "boundary",
-		Diagnosis:     "The boundary was widened.",
+		Diagnosis:     "calc/calc.go line 10 has a boundary comparison changed at the lower guard branch.",
 	}, reviewerLog(), GradeOptions{Coach: scriptedGrader{score: 99}})
 	if err != nil {
 		t.Fatalf("Grade returned error: %v", err)
@@ -181,19 +183,20 @@ func TestGradeRejectsDiagnosisFeedbackWithBannedIdentifiers(t *testing.T) {
 }
 
 func TestGradeBuildsDiagnosisRubric(t *testing.T) {
+	diagnosis := "calc/calc.go line 10 has a boundary comparison changed at the lower guard branch during validation."
 	grader := &capturingGrader{score: 37}
 	got, err := Grade(context.Background(), Submission{
 		SessionID:     "sess-1",
 		FilePath:      "calc/calc.go",
 		StartLine:     10,
 		OperatorClass: "boundary",
-		Diagnosis:     "The boundary changed.",
+		Diagnosis:     diagnosis,
 	}, reviewerLog(), GradeOptions{Coach: grader})
 	if err != nil {
 		t.Fatalf("Grade returned error: %v", err)
 	}
-	if got.DiagnosisScore != 37 {
-		t.Fatalf("DiagnosisScore = %d, want 37", got.DiagnosisScore)
+	if got.DiagnosisScore != 50 {
+		t.Fatalf("DiagnosisScore = %d, want 50", got.DiagnosisScore)
 	}
 	if grader.request.SessionID != "sess-1" {
 		t.Fatalf("SessionID = %q, want sess-1", grader.request.SessionID)
@@ -203,8 +206,94 @@ func TestGradeBuildsDiagnosisRubric(t *testing.T) {
 			t.Fatalf("rubric %q does not contain %q", grader.request.Rubric, want)
 		}
 	}
-	if grader.request.Answer != "The boundary changed." {
+	if grader.request.Answer != diagnosis {
 		t.Fatalf("Answer = %q, want submitted diagnosis", grader.request.Answer)
+	}
+}
+
+func TestGradeDiagnosisDeterministicWithoutCoach(t *testing.T) {
+	got, err := Grade(context.Background(), Submission{
+		FilePath:      "calc/calc.go",
+		StartLine:     10,
+		OperatorClass: "boundary",
+		Diagnosis:     "calc/calc.go line 10 has a boundary comparison change.",
+	}, reviewerLog(), GradeOptions{})
+	if err != nil {
+		t.Fatalf("Grade returned error: %v", err)
+	}
+	if got.DiagnosisScore != 50 {
+		t.Fatalf("DiagnosisScore = %d, want deterministic full score", got.DiagnosisScore)
+	}
+}
+
+func TestGradeDiagnosisMechanismIsCached(t *testing.T) {
+	grader := &countingGrader{score: 12}
+	sub := Submission{
+		SessionID:     "sess-cache",
+		FilePath:      "calc/calc.go",
+		StartLine:     10,
+		OperatorClass: "boundary",
+		Diagnosis:     "calc/calc.go line 10 has a boundary comparison change for minimum values.",
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := Grade(context.Background(), sub, reviewerLog(), GradeOptions{Coach: grader}); err != nil {
+			t.Fatalf("Grade returned error: %v", err)
+		}
+	}
+	if grader.calls != 1 {
+		t.Fatalf("grader calls = %d, want 1 cached mechanism grade", grader.calls)
+	}
+}
+
+func TestGradeBuildsDeterministicCommentary(t *testing.T) {
+	log := reviewerLog()
+	log.Profile = mutate.ProfileDifficulty(log.Mutation)
+	got, err := Grade(context.Background(), Submission{
+		SessionID:     "sess-commentary",
+		FilePath:      "calculator/calculator.go",
+		StartLine:     13,
+		EndLine:       13,
+		OperatorClass: "boundary",
+		Diagnosis:     "boundary comparison changed at line 13",
+	}, log, GradeOptions{})
+	if err != nil {
+		t.Fatalf("Grade returned error: %v", err)
+	}
+	for _, want := range []string{
+		"The hidden mutation was `boundary`",
+		"difficulty profile is",
+		"Your diagnosis scored",
+		"final kata score",
+	} {
+		if !strings.Contains(got.Commentary, want) {
+			t.Fatalf("commentary missing %q:\n%s", want, got.Commentary)
+		}
+	}
+}
+
+func TestGradeBuildsReasoningTrace(t *testing.T) {
+	log := reviewerLog()
+	log.Profile = mutate.ProfileDifficulty(log.Mutation)
+	got, err := Grade(context.Background(), Submission{
+		SessionID:     "sess-trace",
+		FilePath:      "calc/calc.go",
+		StartLine:     10,
+		OperatorClass: "boundary",
+		Diagnosis:     "calc/calc.go line 10 has a boundary comparison change.",
+		ForecastFile:  "calc/other.go",
+	}, log, GradeOptions{})
+	if err != nil {
+		t.Fatalf("Grade returned error: %v", err)
+	}
+	for _, want := range []string{
+		"1. Start from the failing behavior",
+		"Compare the first forecast `calc/other.go`",
+		"actual mutation file `calc/calc.go`",
+		"Before editing, verify the diagnosis",
+	} {
+		if !strings.Contains(got.ReasoningTrace, want) {
+			t.Fatalf("reasoning trace missing %q:\n%s", want, got.ReasoningTrace)
+		}
 	}
 }
 
@@ -246,6 +335,20 @@ func (g scriptedGrader) Grade(ctx context.Context, req coach.GradeRequest) (coac
 type capturingGrader struct {
 	score   int
 	request coach.GradeRequest
+}
+
+type countingGrader struct {
+	score int
+	calls int
+}
+
+func (g *countingGrader) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
+	return coach.Hint{}, nil
+}
+
+func (g *countingGrader) Grade(ctx context.Context, req coach.GradeRequest) (coach.Grade, error) {
+	g.calls++
+	return coach.Grade{Score: g.score, Feedback: "feedback"}, nil
 }
 
 func (g *capturingGrader) Hint(ctx context.Context, req coach.HintRequest) (coach.Hint, error) {
